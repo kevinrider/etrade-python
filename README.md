@@ -3,10 +3,10 @@
 This project is currently under development and not ready for general brokerage
 account access or trading.
 
-`etrade-python` is an unofficial, async-first Python client for the E*TRADE REST
+`etrade-python` is an unofficial, async-first Python client for the E\*TRADE REST
 API. It targets Python 3.11+ and is intended to provide typed request and
 response models, centralized HTTP handling, OAuth session management, and broad
-coverage of the officially documented E*TRADE API.
+coverage of the officially documented E\*TRADE API.
 
 ## Project Overview
 
