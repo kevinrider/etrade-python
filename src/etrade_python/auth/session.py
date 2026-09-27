@@ -1,0 +1,114 @@
+"""OAuth access-token lifecycle management."""
+
+import asyncio
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
+from zoneinfo import ZoneInfo
+
+import httpx
+
+from etrade_python.auth.credentials import ETradeCredentials
+from etrade_python.auth.oauth import OAuthClient
+from etrade_python.auth.stores.base import CredentialStore
+from etrade_python.config import ETradeSettings
+from etrade_python.exceptions import AuthenticationRequired, AuthorizationExpired
+
+EASTERN = ZoneInfo("America/New_York")
+INACTIVITY_SECONDS = 7200
+
+
+class TokenStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE_RENEWABLE = "inactive_renewable"
+    EXPIRED = "expired"
+    MISSING = "missing"
+
+
+class SessionManager:
+    """Decide whether persisted credentials are usable, renewable, or expired."""
+
+    def __init__(
+        self,
+        *,
+        settings: ETradeSettings,
+        oauth_client: OAuthClient,
+        credential_store: CredentialStore,
+        profile: str = "default",
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._settings = settings
+        self._oauth_client = oauth_client
+        self._credential_store = credential_store
+        self._profile = profile
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._renewal_lock = asyncio.Lock()
+
+    async def ensure_active(self) -> ETradeCredentials:
+        async with self._renewal_lock:
+            now = self._now()
+            credentials = await self._credential_store.load(self._profile)
+            status = self.status(credentials, now=now)
+            if status is TokenStatus.MISSING:
+                raise AuthenticationRequired("E*TRADE authorization is required")
+            if credentials is None:
+                raise AuthenticationRequired("E*TRADE authorization is required")
+            if status is TokenStatus.EXPIRED:
+                raise AuthorizationExpired("E*TRADE authorization has expired")
+            if status is TokenStatus.ACTIVE:
+                updated = credentials.with_last_used(now)
+                await self._credential_store.save(self._profile, updated)
+                return updated
+            result = await self._oauth_client.renew_access_token(credentials)
+            renewed = result.credentials.with_renewal(self._now())
+            await self._credential_store.save(self._profile, renewed)
+            return renewed
+
+    async def save(self, credentials: ETradeCredentials) -> None:
+        await self._credential_store.save(self._profile, credentials)
+
+    async def load(self) -> ETradeCredentials | None:
+        return await self._credential_store.load(self._profile)
+
+    async def delete(self) -> None:
+        await self._credential_store.delete(self._profile)
+
+    def status(
+        self, credentials: ETradeCredentials | None, *, now: datetime | None = None
+    ) -> TokenStatus:
+        if credentials is None:
+            return TokenStatus.MISSING
+        current = (now or self._now()).astimezone(UTC)
+        if self._is_expired(credentials, now=current):
+            return TokenStatus.EXPIRED
+        inactive_after = timedelta(
+            seconds=INACTIVITY_SECONDS - self._settings.inactivity_buffer_seconds
+        )
+        if current - credentials.last_used_at >= inactive_after:
+            return TokenStatus.INACTIVE_RENEWABLE
+        return TokenStatus.ACTIVE
+
+    def _is_expired(self, credentials: ETradeCredentials, *, now: datetime) -> bool:
+        acquired_eastern = credentials.acquired_at.astimezone(EASTERN)
+        next_midnight = (acquired_eastern + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        return now.astimezone(EASTERN) >= next_midnight
+
+    def _now(self) -> datetime:
+        value = self._clock()
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+
+class SessionAuthenticator:
+    """Transport authenticator backed by SessionManager credentials."""
+
+    def __init__(self, session_manager: SessionManager, oauth_client: OAuthClient) -> None:
+        self._session_manager = session_manager
+        self._oauth_client = oauth_client
+
+    async def authenticate(self, request: httpx.Request) -> None:
+        credentials = await self._session_manager.ensure_active()
+        self._oauth_client.sign_request(request, credentials)
