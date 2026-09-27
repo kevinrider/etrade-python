@@ -21,7 +21,16 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["httpx>=0.28,<1", "pydantic>=2.10,<3", "pydantic-settings>=2.7,<3"]
+dependencies = [
+  "httpx>=0.28,<1",
+  "keyring>=25,<26",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "typer>=0.20,<1",
+]
+
+[project.scripts]
+etrade = "etrade_python.cli.app:app"
 
 [project.optional-dependencies]
 dev = [
@@ -36,7 +45,7 @@ packages = ["src/etrade_python"]
 
 [tool.hatch.build.targets.sdist]
 core-metadata-version = "2.4"
-include = ["/src", "/tests", "/docs", "/README.md", "/LICENSE", "/CHANGELOG.md", "/CONTRIBUTING.md", "/SECURITY.md", "/pyproject.toml", "/.env.example"]
+include = ["/src", "/tests", "/README.md", "/LICENSE", "/CHANGELOG.md", "/CONTRIBUTING.md", "/SECURITY.md", "/pyproject.toml", "/.env.example"]
 
 [tool.ruff]
 target-version = "py311"
