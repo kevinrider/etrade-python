@@ -37,17 +37,18 @@ Implemented:
 - retry policy abstraction for safe read operations
 - response parsing and error normalization
 - sanitized operational logging boundaries
+- OAuth 1.0a signing and protocol operations
+- session lifecycle handling for inactivity renewal and daily expiration
+- memory and keyring credential stores
+- diagnostic auth CLI
 - endpoint coverage tracking
 - local architecture and research notes
-- offline tests for configuration, transport, retries, responses, logging, and client lifecycle
+- offline tests for configuration, transport, OAuth, sessions, credential stores, CLI,
+  retries, responses, logging, and client lifecycle
 - Ruff, Pyright, pytest, coverage, package build, and CI configuration
 
 Planned:
 
-- OAuth 1.0a request/access token flow
-- session lifecycle and token renewal
-- memory and keyring credential stores
-- diagnostic CLI
 - accounts endpoints
 - portfolio endpoints
 - transactions endpoints
@@ -58,8 +59,9 @@ Planned:
 
 ## API Coverage
 
-Inspected 2026-09-26. **No broker endpoints are implemented yet.**
-Infrastructure tests do not count as endpoint coverage. All method/model names
+Inspected 2026-09-26. OAuth endpoints are implemented and covered by offline
+contract tests. No business API endpoints are implemented yet. Infrastructure
+tests do not count as endpoint coverage. Business service method/model names
 below are planned, not importable APIs.
 
 Business paths are relative to `/v1` on the sandbox or production API host.
@@ -68,11 +70,11 @@ suffixes are format selectors and do not create separate endpoints.
 
 | Family | Official endpoint | Planned method | Planned request | Planned response | Implemented? | Contract tests? | Sandbox tested? | Production tested? | Milestone |
 |---|---|---|---|---|---|---|---|---|---|
-| OAuth | [GET /oauth/request_token](https://apisb.etrade.com/docs/api/authorization/request_token.html) | `OAuthClient.get_request_token` | RequestTokenRequest | RequestToken | No | No | No | No | 2 |
-| OAuth | [GET https://us.etrade.com/e/t/etws/authorize](https://apisb.etrade.com/docs/api/authorization/authorize.html) | `OAuthClient.get_authorization_url` | RequestToken | AuthorizationURL | No | No | No | No | 2 |
-| OAuth | [GET /oauth/access_token](https://apisb.etrade.com/docs/api/authorization/get_access_token.html) | `OAuthClient.exchange_verifier` | AccessTokenRequest | ETradeCredentials | No | No | No | No | 2 |
-| OAuth | [GET /oauth/renew_access_token](https://apisb.etrade.com/docs/api/authorization/renew_access_token.html) | `OAuthClient.renew_access_token` | ETradeCredentials | RenewalResult | No | No | No | No | 2 |
-| OAuth | [GET /oauth/revoke_access_token](https://apisb.etrade.com/docs/api/authorization/revoke_access_token.html) | `OAuthClient.revoke_access_token` | ETradeCredentials | RevocationResult | No | No | No | No | 2 |
+| OAuth | [GET /oauth/request_token](https://apisb.etrade.com/docs/api/authorization/request_token.html) | `OAuthClient.get_request_token` | - | RequestToken | Yes | Yes | No | No | 2 |
+| OAuth | [GET https://us.etrade.com/e/t/etws/authorize](https://apisb.etrade.com/docs/api/authorization/authorize.html) | `OAuthClient.get_authorization_url` | RequestToken | AuthorizationUrl | Yes | Yes | No | No | 2 |
+| OAuth | [GET /oauth/access_token](https://apisb.etrade.com/docs/api/authorization/get_access_token.html) | `OAuthClient.exchange_verifier` | RequestToken + verifier | ETradeCredentials | Yes | Yes | No | No | 2 |
+| OAuth | [GET /oauth/renew_access_token](https://apisb.etrade.com/docs/api/authorization/renew_access_token.html) | `OAuthClient.renew_access_token` | ETradeCredentials | RenewalResult | Yes | Yes | No | No | 2 |
+| OAuth | [GET /oauth/revoke_access_token](https://apisb.etrade.com/docs/api/authorization/revoke_access_token.html) | `OAuthClient.revoke_access_token` | ETradeCredentials | RevocationResult | Yes | Yes | No | No | 2 |
 | Accounts | [GET /accounts/list](https://apisb.etrade.com/docs/api/account/api-account-v1.html) | `accounts.list` | - | list[Account] | No | No | No | No | 3 |
 | Accounts | [GET /accounts/{accountIdKey}/balance](https://apisb.etrade.com/docs/api/account/api-balance-v1.html) | `accounts.get_balance` | BalanceRequest | AccountBalance | No | No | No | No | 3 |
 | Portfolio | [GET /accounts/{accountIdKey}/portfolio](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_positions` | PositionsRequest | PositionsPage | No | No | No | No | 4 |
@@ -105,11 +107,13 @@ offline fixtures alone never change those columns.
 
 - Python 3.11+
 - `httpx`
+- `keyring`
 - Pydantic v2
 - `pydantic-settings`
 - `pytest`
 - Ruff
 - Pyright
+- Typer
 - uv-compatible development workflow
 
 ## Development Setup
