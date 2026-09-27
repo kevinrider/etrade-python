@@ -1,120 +1,146 @@
 # etrade-python
 
-An unofficial, async-first, typed Python client for the E*TRADE REST API.
-Python 3.11+. Apache-2.0. Independent of MCP and any application framework.
+This project is currently under development and not ready for general brokerage
+account access or trading.
 
-**Development status:** foundation only (`0.1.0.dev0`). Settings, HTTP transport,
-errors, retries, and lifecycle management are implemented. OAuth, credential
-stores, API services, and the diagnostic CLI are not implemented. This is not
-ready to access brokerage accounts or place orders. See [coverage](docs/api-coverage.md).
+`etrade-python` is an unofficial, async-first Python client for the E*TRADE REST
+API. It targets Python 3.11+ and is intended to provide typed request and
+response models, centralized HTTP handling, OAuth session management, and broad
+coverage of the officially documented E*TRADE API.
 
-## Development installation
+## Project Overview
+
+The goal is to build a modern Python library that can be used from ordinary
+Python applications, CLIs, background workers, web services, workflow engines,
+and notebooks.
+
+The library is designed around:
+
+- async networking with `httpx`
+- typed models and validation with Pydantic v2
+- explicit sandbox and production environments
+- centralized request, retry, logging, and error handling
+- conservative behavior around brokerage credentials and order mutations
+- framework-independent architecture
+
+## Current Status
+
+Implemented:
+
+- package skeleton using a `src` layout
+- Python package metadata for the `etrade-python` distribution
+- typed settings with environment variable support
+- explicit sandbox and production environment handling
+- async client lifecycle
+- injectable async HTTP transport
+- structured public exception hierarchy
+- retry policy abstraction for safe read operations
+- response parsing and error normalization
+- sanitized operational logging boundaries
+- endpoint coverage tracking
+- local architecture and research notes
+- offline tests for configuration, transport, retries, responses, logging, and client lifecycle
+- Ruff, Pyright, pytest, coverage, package build, and CI configuration
+
+Planned:
+
+- OAuth 1.0a request/access token flow
+- session lifecycle and token renewal
+- memory and keyring credential stores
+- diagnostic CLI
+- accounts endpoints
+- portfolio endpoints
+- transactions endpoints
+- market data endpoints
+- order preview, placement, modification, and cancellation endpoints
+- alerts endpoints
+- full endpoint-completeness review against official E*TRADE documentation
+
+## API Coverage
+
+Inspected 2026-09-26. **No broker endpoints are implemented yet.**
+Infrastructure tests do not count as endpoint coverage. All method/model names
+below are planned, not importable APIs.
+
+Business paths are relative to `/v1` on the sandbox or production API host.
+OAuth paths are relative to `https://api.etrade.com` for both environments. JSON
+suffixes are format selectors and do not create separate endpoints.
+
+| Family | Official endpoint | Planned method | Planned request | Planned response | Implemented? | Contract tests? | Sandbox tested? | Production tested? | Milestone |
+|---|---|---|---|---|---|---|---|---|---|
+| OAuth | [GET /oauth/request_token](https://apisb.etrade.com/docs/api/authorization/request_token.html) | `OAuthClient.get_request_token` | RequestTokenRequest | RequestToken | No | No | No | No | 2 |
+| OAuth | [GET https://us.etrade.com/e/t/etws/authorize](https://apisb.etrade.com/docs/api/authorization/authorize.html) | `OAuthClient.get_authorization_url` | RequestToken | AuthorizationURL | No | No | No | No | 2 |
+| OAuth | [GET /oauth/access_token](https://apisb.etrade.com/docs/api/authorization/get_access_token.html) | `OAuthClient.exchange_verifier` | AccessTokenRequest | ETradeCredentials | No | No | No | No | 2 |
+| OAuth | [GET /oauth/renew_access_token](https://apisb.etrade.com/docs/api/authorization/renew_access_token.html) | `OAuthClient.renew_access_token` | ETradeCredentials | RenewalResult | No | No | No | No | 2 |
+| OAuth | [GET /oauth/revoke_access_token](https://apisb.etrade.com/docs/api/authorization/revoke_access_token.html) | `OAuthClient.revoke_access_token` | ETradeCredentials | RevocationResult | No | No | No | No | 2 |
+| Accounts | [GET /accounts/list](https://apisb.etrade.com/docs/api/account/api-account-v1.html) | `accounts.list` | - | list[Account] | No | No | No | No | 3 |
+| Accounts | [GET /accounts/{accountIdKey}/balance](https://apisb.etrade.com/docs/api/account/api-balance-v1.html) | `accounts.get_balance` | BalanceRequest | AccountBalance | No | No | No | No | 3 |
+| Portfolio | [GET /accounts/{accountIdKey}/portfolio](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_positions` | PositionsRequest | PositionsPage | No | No | No | No | 4 |
+| Portfolio* | [GET /accounts/{accountIdKey}/portfolio/{positionId}](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_position_lots` | PositionLotsRequest | PositionLots | No | No | No | No | 4 |
+| Transactions | [GET /accounts/{accountIdKey}/transactions](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.list` | TransactionsRequest | TransactionsPage | No | No | No | No | 4 |
+| Transactions | [GET /accounts/{accountIdKey}/transactions/{tranid}](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.get` | TransactionDetailsRequest | Transaction | No | No | No | No | 4 |
+| Market | [GET /market/quote/{symbols}](https://apisb.etrade.com/docs/api/market/api-quote-v1.html) | `market.get_quote / get_quotes` | QuotesRequest | Quote / QuotesResponse | No | No | No | No | 5 |
+| Market | [GET /market/lookup/{search}](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.lookup_product` | ProductLookupRequest | ProductsResponse | No | No | No | No | 5 |
+| Market | [GET /market/optionexpiredate](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_expirations` | OptionExpirationsRequest | OptionExpirationsResponse | No | No | No | No | 5 |
+| Market | [GET /market/optionchains](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_chain` | OptionChainRequest | OptionChain | No | No | No | No | 5 |
+| Orders | [GET /accounts/{accountIdKey}/orders](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.list` | OrdersRequest | OrdersPage | No | No | No | No | 6 |
+| Orders* | [GET /accounts/{accountIdKey}/orders/{orderId}](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.get` | OrderDetailsRequest | Order | No | No | No | No | 6 |
+| Orders | [POST /accounts/{accountIdKey}/orders/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview` | OrderPreviewRequest | OrderPreview | No | No | No | No | 6 |
+| Orders | [POST /accounts/{accountIdKey}/orders/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place` | OrderPlacementRequest | OrderExecution | No | No | No | No | 6 |
+| Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview_change` | OrderChangePreviewRequest | OrderPreview | No | No | No | No | 6 |
+| Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.modify` | OrderModificationRequest | OrderExecution | No | No | No | No | 6 |
+| Orders | [PUT /accounts/{accountIdKey}/orders/cancel](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.cancel` | OrderCancellationRequest | OrderCancellation | No | No | No | No | 6 |
+| Alerts | [GET /user/alerts](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.list` | AlertsRequest | AlertsResponse | No | No | No | No | 7 |
+| Alerts | [GET /user/alerts/{id}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.get` | AlertDetailsRequest | Alert | No | No | No | No | 7 |
+| Alerts | [DELETE /user/alerts/{alert_id_list}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.delete` | DeleteAlertsRequest | DeleteAlertsResponse | No | No | No | No | 7 |
+
+*Partially documented in official response examples, without a standalone
+complete endpoint specification. Confirm the contract before implementing.*
+
+Milestone 8 will recheck the official documentation and fill gaps. Sandbox and
+production evidence must include date and scenario when actually collected;
+offline fixtures alone never change those columns.
+
+## Key Technologies
+
+- Python 3.11+
+- `httpx`
+- Pydantic v2
+- `pydantic-settings`
+- `pytest`
+- Ruff
+- Pyright
+- uv-compatible development workflow
+
+## Development Setup
+
+Create a virtual environment with Python 3.11 or newer:
 
 ```sh
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install -e '.[dev]'
+uv python install 3.12
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -e '.[dev]'
 ```
 
-The intended PyPI name is `etrade-python` and import name is `etrade_python`.
-This repository does not claim a published release or ownership of that PyPI name.
+Run the main checks:
 
-## Configuration and lifecycle
-
-```python
-from etrade_python import ETradeClient, ETradeSettings
-
-# Environment: ETRADE_CONSUMER_KEY and ETRADE_CONSUMER_SECRET are required.
-# ETRADE_ENVIRONMENT defaults to sandbox; production must be explicit.
-settings = ETradeSettings()
-# Optional local dotenv loading: ETradeSettings(_env_file=".env")
-
-
-async def main() -> None:
-    async with ETradeClient(settings) as client:
-        # Future services will share this client's transport and session.
-        pass
+```sh
+.venv/bin/pytest
+.venv/bin/ruff check .
+.venv/bin/pyright --pythonpath .venv/bin/python
 ```
 
-`ETradeClient.from_environment()` also loads settings, without automatically
-reading dotenv files. Constructor arguments override environment values;
-environment values override explicitly loaded dotenv values. Secrets are masked
-in serialization and excluded from settings repr. Invalid constructor settings
-raise `ETradeValidationError` without echoing input values.
-
-Timeout defaults to 30 seconds (`ETRADE_REQUEST_TIMEOUT_SECONDS`).
-`ETRADE_INACTIVITY_BUFFER_SECONDS` defaults to 300; session handling is deferred.
-
-Obtain separate sandbox and production consumer keys through the
-[official getting-started instructions](https://developer.etrade.com/getting-started).
-Both environments use the same OAuth server. Sandbox returns canned data that
-may not match requested symbols; it is not a market simulator. See the
-[official developer guide](https://developer.etrade.com/getting-started/developer-guides).
-
-## Transport testing
-
-The transport is a low-level extension point. Business methods and their typed
-models will be the ordinary application interface. Until OAuth is implemented,
-a request without an injected authenticator raises `AuthenticationRequired`.
-Use fake authentication only with a mock HTTP transport:
-
-```python
-import httpx
-from etrade_python import ETradeSettings
-from etrade_python.transport import ApiTransport
-
-
-class FakeAuthenticator:
-    async def authenticate(self, request: httpx.Request) -> None:
-        request.headers["Authorization"] = 'OAuth oauth_token="fake-token"'
-
-
-async def test_request() -> None:
-    settings = ETradeSettings(consumer_key="fake-key", consumer_secret="fake-secret")
-    mock = httpx.MockTransport(lambda request: httpx.Response(200, json={"ok": True}))
-    async with ApiTransport(
-        settings, authenticator=FakeAuthenticator(), http_transport=mock
-    ) as api:
-        response = await api.request("GET", "/v1/example.json", operation="example.read")
-        assert response.data == {"ok": True}
-```
-
-An injected `http_client=httpx.AsyncClient(...)` stays caller-owned. Supplying
-`http_transport=...` creates an internally owned client which is closed on exit.
-Do not provide both. Internal clients disable environment proxies (`trust_env=False`);
-applications needing a proxy can inject a configured client. Independent requests
-can run with `asyncio.gather`; do not close a client while requests are in flight.
-
-No retries occur by default. `RetrySafety.SAFE_READ` opts a GET/HEAD operation
-into bounded retries for selected transient failures. Never classify a mutation,
-OAuth lifecycle call, or unverified operation as a safe read. Each attempt is
-authenticated afresh. Decimal request values become strings; fractional JSON
-response values decode directly to Decimal. HTTP 204 returns `data=None`.
-
-## Errors and security
-
-Catch `ETradeError` for library failures. HTTP failures expose sanitized
-`status_code`, `broker_code`, `broker_message`, and `request_id` attributes through
-`ETradeApiError`; transport failures raise `ETradeTransportError`. Timeouts during
-mutations can leave the broker outcome unknown and must not trigger blind resubmission.
-
-See [SECURITY.md](SECURITY.md). Avoid credential-bearing hooks and custom wire logging on injected clients.
-Automatic HTTPX/httpcore logs are suppressed only during SDK exchanges, using
-task-local context; unrelated application requests retain their logging.
-The library's own logs contain operation labels,
-environment, status, latency, and attempt numbers, not URLs or payloads.
-
-Future order-placement methods will affect real brokerage accounts in production;
-preview and placement will remain separate operations. No production trading tests
-will run in routine CI. Keyring will be the default persistent local credential store
-when OAuth is implemented; no credentials are persisted in this version.
-
-## Checks and roadmap
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and package verification,
-[architecture](docs/architecture.md) for boundaries, and
-[research notes](docs/research-notes.md) for source review and unresolved questions.
-Next: OAuth/session lifecycle, stores, and authentication CLI, followed by accounts.
+## Safety and Disclaimer
 
 This project is not affiliated with, endorsed by, or supported by Morgan Stanley
 or E*TRADE. It is a software API client, not financial advice.
+
+Production order placement is not implemented yet. Future production trading
+features will affect real brokerage accounts and must be tested carefully in the
+sandbox environment before live use.
+
+## Further Reading
+
+- [Official E*TRADE developer documentation](https://developer.etrade.com/)
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
