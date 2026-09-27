@@ -68,40 +68,33 @@ Business paths are relative to `/v1` on the sandbox or production API host.
 OAuth paths are relative to `https://api.etrade.com` for both environments. JSON
 suffixes are format selectors and do not create separate endpoints.
 
-| Family | Official endpoint | Planned method | Planned request | Planned response | Implemented? | Contract tests? | Sandbox tested? | Production tested? | Milestone |
-|---|---|---|---|---|---|---|---|---|---|
-| OAuth | [GET /oauth/request_token](https://apisb.etrade.com/docs/api/authorization/request_token.html) | `OAuthClient.get_request_token` | - | RequestToken | Yes | Yes | No | No | 2 |
-| OAuth | [GET https://us.etrade.com/e/t/etws/authorize](https://apisb.etrade.com/docs/api/authorization/authorize.html) | `OAuthClient.get_authorization_url` | RequestToken | AuthorizationUrl | Yes | Yes | No | No | 2 |
-| OAuth | [GET /oauth/access_token](https://apisb.etrade.com/docs/api/authorization/get_access_token.html) | `OAuthClient.exchange_verifier` | RequestToken + verifier | ETradeCredentials | Yes | Yes | No | No | 2 |
-| OAuth | [GET /oauth/renew_access_token](https://apisb.etrade.com/docs/api/authorization/renew_access_token.html) | `OAuthClient.renew_access_token` | ETradeCredentials | RenewalResult | Yes | Yes | No | No | 2 |
-| OAuth | [GET /oauth/revoke_access_token](https://apisb.etrade.com/docs/api/authorization/revoke_access_token.html) | `OAuthClient.revoke_access_token` | ETradeCredentials | RevocationResult | Yes | Yes | No | No | 2 |
-| Accounts | [GET /accounts/list](https://apisb.etrade.com/docs/api/account/api-account-v1.html) | `accounts.list` | - | list[Account] | No | No | No | No | 3 |
-| Accounts | [GET /accounts/{accountIdKey}/balance](https://apisb.etrade.com/docs/api/account/api-balance-v1.html) | `accounts.get_balance` | BalanceRequest | AccountBalance | No | No | No | No | 3 |
-| Portfolio | [GET /accounts/{accountIdKey}/portfolio](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_positions` | PositionsRequest | PositionsPage | No | No | No | No | 4 |
-| Portfolio* | [GET /accounts/{accountIdKey}/portfolio/{positionId}](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_position_lots` | PositionLotsRequest | PositionLots | No | No | No | No | 4 |
-| Transactions | [GET /accounts/{accountIdKey}/transactions](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.list` | TransactionsRequest | TransactionsPage | No | No | No | No | 4 |
-| Transactions | [GET /accounts/{accountIdKey}/transactions/{tranid}](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.get` | TransactionDetailsRequest | Transaction | No | No | No | No | 4 |
-| Market | [GET /market/quote/{symbols}](https://apisb.etrade.com/docs/api/market/api-quote-v1.html) | `market.get_quote / get_quotes` | QuotesRequest | Quote / QuotesResponse | No | No | No | No | 5 |
-| Market | [GET /market/lookup/{search}](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.lookup_product` | ProductLookupRequest | ProductsResponse | No | No | No | No | 5 |
-| Market | [GET /market/optionexpiredate](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_expirations` | OptionExpirationsRequest | OptionExpirationsResponse | No | No | No | No | 5 |
-| Market | [GET /market/optionchains](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_chain` | OptionChainRequest | OptionChain | No | No | No | No | 5 |
-| Orders | [GET /accounts/{accountIdKey}/orders](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.list` | OrdersRequest | OrdersPage | No | No | No | No | 6 |
-| Orders* | [GET /accounts/{accountIdKey}/orders/{orderId}](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.get` | OrderDetailsRequest | Order | No | No | No | No | 6 |
-| Orders | [POST /accounts/{accountIdKey}/orders/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview` | OrderPreviewRequest | OrderPreview | No | No | No | No | 6 |
-| Orders | [POST /accounts/{accountIdKey}/orders/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place` | OrderPlacementRequest | OrderExecution | No | No | No | No | 6 |
-| Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview_change` | OrderChangePreviewRequest | OrderPreview | No | No | No | No | 6 |
-| Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.modify` | OrderModificationRequest | OrderExecution | No | No | No | No | 6 |
-| Orders | [PUT /accounts/{accountIdKey}/orders/cancel](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.cancel` | OrderCancellationRequest | OrderCancellation | No | No | No | No | 6 |
-| Alerts | [GET /user/alerts](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.list` | AlertsRequest | AlertsResponse | No | No | No | No | 7 |
-| Alerts | [GET /user/alerts/{id}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.get` | AlertDetailsRequest | Alert | No | No | No | No | 7 |
-| Alerts | [DELETE /user/alerts/{alert_id_list}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.delete` | DeleteAlertsRequest | DeleteAlertsResponse | No | No | No | No | 7 |
-
-*Partially documented in official response examples, without a standalone
-complete endpoint specification. Confirm the contract before implementing.*
-
-Milestone 8 will recheck the official documentation and fill gaps. Sandbox and
-production evidence must include date and scenario when actually collected;
-offline fixtures alone never change those columns.
+| Status | Family | Official endpoint | Planned method | Planned request | Planned response | Contract tests? | Production tested? | Milestone |
+|---|---|---|---|---|---|---|---|---|
+| Done | OAuth | [GET /oauth/request_token](https://apisb.etrade.com/docs/api/authorization/request_token.html) | `OAuthClient.get_request_token` | - | RequestToken | Yes | Yes | 2 |
+| Done | OAuth | [GET https://us.etrade.com/e/t/etws/authorize](https://apisb.etrade.com/docs/api/authorization/authorize.html) | `OAuthClient.get_authorization_url` | RequestToken | AuthorizationUrl | Yes | Yes | 2 |
+| Done | OAuth | [GET /oauth/access_token](https://apisb.etrade.com/docs/api/authorization/get_access_token.html) | `OAuthClient.exchange_verifier` | RequestToken + verifier | ETradeCredentials | Yes | Yes | 2 |
+| Done | OAuth | [GET /oauth/renew_access_token](https://apisb.etrade.com/docs/api/authorization/renew_access_token.html) | `OAuthClient.renew_access_token` | ETradeCredentials | RenewalResult | Yes | Yes | 2 |
+| Done | OAuth | [GET /oauth/revoke_access_token](https://apisb.etrade.com/docs/api/authorization/revoke_access_token.html) | `OAuthClient.revoke_access_token` | ETradeCredentials | RevocationResult | Yes | Yes | 2 |
+| Planned | Accounts | [GET /accounts/list](https://apisb.etrade.com/docs/api/account/api-account-v1.html) | `accounts.list` | - | list[Account] | No | No | 3 |
+| Planned | Accounts | [GET /accounts/{accountIdKey}/balance](https://apisb.etrade.com/docs/api/account/api-balance-v1.html) | `accounts.get_balance` | BalanceRequest | AccountBalance | No | No | 3 |
+| Planned | Portfolio | [GET /accounts/{accountIdKey}/portfolio](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_positions` | PositionsRequest | PositionsPage | No | No | 4 |
+| Planned | Portfolio | [GET /accounts/{accountIdKey}/portfolio/{positionId}](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_position_lots` | PositionLotsRequest | PositionLots | No | No | 4 |
+| Planned | Transactions | [GET /accounts/{accountIdKey}/transactions](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.list` | TransactionsRequest | TransactionsPage | No | No | 4 |
+| Planned | Transactions | [GET /accounts/{accountIdKey}/transactions/{tranid}](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.get` | TransactionDetailsRequest | Transaction | No | No | 4 |
+| Planned | Market | [GET /market/quote/{symbols}](https://apisb.etrade.com/docs/api/market/api-quote-v1.html) | `market.get_quote / get_quotes` | QuotesRequest | Quote / QuotesResponse | No | No | 5 |
+| Planned | Market | [GET /market/lookup/{search}](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.lookup_product` | ProductLookupRequest | ProductsResponse | No | No | 5 |
+| Planned | Market | [GET /market/optionexpiredate](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_expirations` | OptionExpirationsRequest | OptionExpirationsResponse | No | No | 5 |
+| Planned | Market | [GET /market/optionchains](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_chain` | OptionChainRequest | OptionChain | No | No | 5 |
+| Planned | Orders | [GET /accounts/{accountIdKey}/orders](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.list` | OrdersRequest | OrdersPage | No | No | 6 |
+| Planned | Orders | [GET /accounts/{accountIdKey}/orders/{orderId}](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.get` | OrderDetailsRequest | Order | No | No | 6 |
+| Planned | Orders | [POST /accounts/{accountIdKey}/orders/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview` | OrderPreviewRequest | OrderPreview | No | No | 6 |
+| Planned | Orders | [POST /accounts/{accountIdKey}/orders/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place` | OrderPlacementRequest | OrderExecution | No | No | 6 |
+| Planned | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview_change` | OrderChangePreviewRequest | OrderPreview | No | No | 6 |
+| Planned | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.modify` | OrderModificationRequest | OrderExecution | No | No | 6 |
+| Planned | Orders | [PUT /accounts/{accountIdKey}/orders/cancel](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.cancel` | OrderCancellationRequest | OrderCancellation | No | No | 6 |
+| Planned | Alerts | [GET /user/alerts](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.list` | AlertsRequest | AlertsResponse | No | No | 7 |
+| Planned | Alerts | [GET /user/alerts/{id}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.get` | AlertDetailsRequest | Alert | No | No | 7 |
+| Planned | Alerts | [DELETE /user/alerts/{alert_id_list}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.delete` | DeleteAlertsRequest | DeleteAlertsResponse | No | No | 7 |
 
 ## Key Technologies
 
