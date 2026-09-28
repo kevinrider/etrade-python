@@ -1,5 +1,12 @@
 """Unofficial async E*TRADE client."""
 
+from etrade_python.accounts import (
+    Account,
+    AccountBalanceRequest,
+    AccountBalanceResponse,
+    AccountListResponse,
+    AccountsService,
+)
 from etrade_python.auth import (
     AuthorizationUrl,
     CredentialStore,
@@ -36,6 +43,11 @@ from etrade_python.exceptions import (
 __version__ = "0.1.0.dev0"
 __all__ = [
     "AuthenticationRequired",
+    "Account",
+    "AccountBalanceRequest",
+    "AccountBalanceResponse",
+    "AccountListResponse",
+    "AccountsService",
     "AuthorizationUrl",
     "AuthorizationExpired",
     "CredentialStore",

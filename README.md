@@ -40,16 +40,16 @@ Implemented:
 - OAuth 1.0a signing and protocol operations
 - session lifecycle handling for inactivity renewal and daily expiration
 - memory and keyring credential stores
-- diagnostic auth CLI
+- diagnostic auth and accounts CLI
 - endpoint coverage tracking
+- typed Accounts service for account list and balance endpoints
 - local architecture and research notes
 - offline tests for configuration, transport, OAuth, sessions, credential stores, CLI,
-  retries, responses, logging, and client lifecycle
+  accounts, retries, responses, logging, and client lifecycle
 - Ruff, Pyright, pytest, coverage, package build, and CI configuration
 
 Planned:
 
-- accounts endpoints
 - portfolio endpoints
 - transactions endpoints
 - market data endpoints
@@ -59,10 +59,9 @@ Planned:
 
 ## API Coverage
 
-Inspected 2026-09-26. OAuth endpoints are implemented and covered by offline
-contract tests. No business API endpoints are implemented yet. Infrastructure
-tests do not count as endpoint coverage. Business service method/model names
-below are planned, not importable APIs.
+Inspected 2026-09-27. OAuth and Accounts endpoints are implemented and covered
+by offline contract tests. Infrastructure tests do not count as endpoint coverage.
+Rows marked Planned describe intended service method/model names, not importable APIs.
 
 Business paths are relative to `/v1` on the sandbox or production API host.
 OAuth paths are relative to `https://api.etrade.com` for both environments. JSON
@@ -75,8 +74,8 @@ suffixes are format selectors and do not create separate endpoints.
 | Done | OAuth | [GET /oauth/access_token](https://apisb.etrade.com/docs/api/authorization/get_access_token.html) | `OAuthClient.exchange_verifier` | RequestToken + verifier | ETradeCredentials | Yes | Yes | 2 |
 | Done | OAuth | [GET /oauth/renew_access_token](https://apisb.etrade.com/docs/api/authorization/renew_access_token.html) | `OAuthClient.renew_access_token` | ETradeCredentials | RenewalResult | Yes | Yes | 2 |
 | Done | OAuth | [GET /oauth/revoke_access_token](https://apisb.etrade.com/docs/api/authorization/revoke_access_token.html) | `OAuthClient.revoke_access_token` | ETradeCredentials | RevocationResult | Yes | Yes | 2 |
-| Planned | Accounts | [GET /accounts/list](https://apisb.etrade.com/docs/api/account/api-account-v1.html) | `accounts.list` | - | list[Account] | No | No | 3 |
-| Planned | Accounts | [GET /accounts/{accountIdKey}/balance](https://apisb.etrade.com/docs/api/account/api-balance-v1.html) | `accounts.get_balance` | BalanceRequest | AccountBalance | No | No | 3 |
+| Done | Accounts | [GET /accounts/list](https://apisb.etrade.com/docs/api/account/api-account-v1.html) | `accounts.list` | - | AccountListResponse | Yes | Yes | 3 |
+| Done | Accounts | [GET /accounts/{accountIdKey}/balance](https://apisb.etrade.com/docs/api/account/api-balance-v1.html) | `accounts.get_balance` | AccountBalanceRequest | AccountBalanceResponse | Yes | Yes | 3 |
 | Planned | Portfolio | [GET /accounts/{accountIdKey}/portfolio](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_positions` | PositionsRequest | PositionsPage | No | No | 4 |
 | Planned | Portfolio | [GET /accounts/{accountIdKey}/portfolio/{positionId}](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_position_lots` | PositionLotsRequest | PositionLots | No | No | 4 |
 | Planned | Transactions | [GET /accounts/{accountIdKey}/transactions](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.list` | TransactionsRequest | TransactionsPage | No | No | 4 |
@@ -108,6 +107,24 @@ suffixes are format selectors and do not create separate endpoints.
 - Pyright
 - Typer
 - uv-compatible development workflow
+
+## Diagnostic CLI
+
+The CLI is intended for authentication bootstrap and manual read-only diagnostics.
+After authenticating with `etrade auth login`, you can manually exercise the
+Milestone 3 Accounts endpoints:
+
+```sh
+.venv/bin/etrade accounts list
+.venv/bin/etrade accounts list --json
+.venv/bin/etrade accounts balance ACCOUNT_ID_KEY
+.venv/bin/etrade accounts balance ACCOUNT_ID_KEY --account-type CASH --real-time-nav
+.venv/bin/etrade accounts balance ACCOUNT_ID_KEY --json
+```
+
+The account commands display account IDs and account ID keys because they are
+needed for manual API testing. They do not print OAuth tokens, token secrets,
+consumer secrets, signatures, or verifier codes.
 
 ## Development Setup
 

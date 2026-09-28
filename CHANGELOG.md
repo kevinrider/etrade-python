@@ -7,6 +7,9 @@
   JSON/Decimal decoding, defensive error parsing, and sanitized operational logs.
 - Add OAuth 1.0a signing, request/access token exchange, renewal, revocation,
   session lifecycle management, memory/keyring credential stores, and auth CLI.
-- Track official endpoint coverage and reference research without claiming endpoint support.
+- Add typed Accounts service support for account listing and account balances.
+- Add diagnostic Accounts CLI commands for manual read-only API testing.
+- Manually verify Accounts list and balance against production.
+- Track official endpoint coverage and reference research without overstating endpoint support.
 - Add offline tests, strict type checks, lint, coverage, and build CI.
-- Business API services remain planned.
+- Portfolio, transactions, market, orders, and alerts services remain planned.
