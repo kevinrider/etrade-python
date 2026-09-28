@@ -1,7 +1,8 @@
-"""The client composition root. Business services arrive in later milestones."""
+"""The client composition root."""
 
 import httpx
 
+from etrade_python.accounts.service import AccountsService
 from etrade_python.auth.oauth import OAuthClient
 from etrade_python.auth.session import SessionAuthenticator, SessionManager
 from etrade_python.auth.stores import CredentialStore, KeyringCredentialStore
@@ -49,6 +50,7 @@ class ETradeClient:
             http_client=self._http_client,
             retry_policy=retry_policy,
         )
+        self.accounts = AccountsService(self._transport)
         self._closed = False
 
     @classmethod
