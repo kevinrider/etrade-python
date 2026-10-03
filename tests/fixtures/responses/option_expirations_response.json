@@ -1,0 +1,24 @@
+{
+  "OptionExpireDateResponse": {
+    "ExpirationDate": [
+      {
+        "year": "2018",
+        "month": "6",
+        "day": "22",
+        "expiryType": "WEEKLY"
+      },
+      {
+        "year": "2018",
+        "month": "6",
+        "day": "29",
+        "expiryType": "WEEKLY"
+      },
+      {
+        "year": "2018",
+        "month": "7",
+        "day": "6",
+        "expiryType": "WEEKLY"
+      }
+    ]
+  }
+}

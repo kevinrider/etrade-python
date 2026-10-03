@@ -1,0 +1,21 @@
+{
+  "LookupResponse": {
+    "Data": [
+      {
+        "symbol": "A",
+        "description": "AGILENT TECHNOLOGIES INC COM",
+        "type": "EQUITY"
+      },
+      {
+        "symbol": "AA",
+        "description": "ALCOA CORP COM",
+        "type": "EQUITY"
+      },
+      {
+        "symbol": "AABA",
+        "description": "ALTABA INC COM",
+        "type": "EQUITY"
+      }
+    ]
+  }
+}
