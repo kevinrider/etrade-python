@@ -139,20 +139,59 @@ consumer secrets, signatures, or verifier codes.
 
 ## Development Setup
 
-Create a virtual environment with Python 3.11 or newer:
+This repository uses `uv` for Python environment management and a `Makefile` for
+common development commands. Create or reset the local virtual environment with
+Python 3.11 or newer:
 
 ```sh
-uv python install 3.12
-uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -e '.[dev]'
+make venv-reset
 ```
 
-Run the main checks:
+Install dependencies into an existing environment:
 
 ```sh
-.venv/bin/pytest
-.venv/bin/ruff check .
-.venv/bin/pyright --pythonpath .venv/bin/python
+make install
+```
+
+Run the full local validation suite:
+
+```sh
+make check
+```
+
+Run individual checks during development:
+
+```sh
+make lint
+make format
+make format-check
+make type
+make test
+```
+
+Build and validate package artifacts:
+
+```sh
+make package-check
+```
+
+Some Makefile targets remove generated local files before rebuilding them:
+
+- `make venv-reset` removes `.venv`
+- `make build` recreates `dist`
+- `make clean` removes build and cache artifacts
+
+If `make` is unavailable, use the equivalent `uv` commands directly:
+
+```sh
+uv venv --python 3.12 .venv
+uv sync --extra dev
+uv run ruff check .
+uv run ruff format --check .
+uv run pyright --pythonpath .venv/bin/python
+uv run pytest
+uv build
+uv run python -m twine check dist/*
 ```
 
 ## Safety and Disclaimer
