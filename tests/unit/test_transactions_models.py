@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -42,6 +43,8 @@ def test_transactions_response_parses_nested_aliases_and_decimals() -> None:
         {
             "Transaction": {
                 "transactionId": "99",
+                "transactionDate": 1767225600000,
+                "postDate": 1767312000000,
                 "amount": "-12.34",
                 "Category": {"categoryName": "Dividends"},
                 "Brokerage": {
@@ -58,6 +61,8 @@ def test_transactions_response_parses_nested_aliases_and_decimals() -> None:
 
     transaction = response.transactions[0]
     assert response.page_markers == "88"
+    assert transaction.transaction_date == datetime(2026, 1, 1, tzinfo=UTC)
+    assert transaction.post_date == datetime(2026, 1, 2, tzinfo=UTC)
     assert transaction.amount == Decimal("-12.34")
     assert transaction.category is not None
     assert transaction.category.category_name == "Dividends"

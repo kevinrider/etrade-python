@@ -1,9 +1,12 @@
 """Typed account request and response models."""
 
+from datetime import date
 from decimal import Decimal
 from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from etrade_python._dates import parse_broker_date
 
 
 class BrokerModel(BaseModel):
@@ -54,12 +57,17 @@ class Account(BrokerModel):
     account_type: str | None = Field(default=None, alias="accountType")
     institution_type: str | None = Field(default=None, alias="institutionType")
     account_status: str | None = Field(default=None, alias="accountStatus")
-    closed_date: int | None = Field(default=None, alias="closedDate")
+    closed_date: date | None = Field(default=None, alias="closedDate")
     shareworks_account: bool | None = Field(default=None, alias="shareWorksAccount")
     shareworks_source: str | None = Field(default=None, alias="shareWorksSource")
     fc_managed_mssb_closed_account: bool | None = Field(
         default=None, alias="fcManagedMssbClosedAccount"
     )
+
+    @field_validator("closed_date", mode="before")
+    @classmethod
+    def parse_closed_date(cls, value: object) -> date | None:
+        return parse_broker_date(value)
 
 
 def _empty_accounts() -> list[Account]:
@@ -155,9 +163,14 @@ class LendingBalance(BrokerModel):
     available_credit: Decimal | None = Field(default=None, alias="availableCredit")
     ytd_interest_paid: Decimal | None = Field(default=None, alias="ytdInterestPaid")
     last_ytd_interest_paid: Decimal | None = Field(default=None, alias="lastYtdInterestPaid")
-    payment_due_date: int | None = Field(default=None, alias="paymentDueDate")
-    last_payment_received_date: int | None = Field(default=None, alias="lastPaymentReceivedDate")
+    payment_due_date: date | None = Field(default=None, alias="paymentDueDate")
+    last_payment_received_date: date | None = Field(default=None, alias="lastPaymentReceivedDate")
     payment_received_month_to_date: Decimal | None = Field(default=None, alias="paymentReceivedMtd")
+
+    @field_validator("payment_due_date", "last_payment_received_date", mode="before")
+    @classmethod
+    def parse_lending_dates(cls, value: object) -> date | None:
+        return parse_broker_date(value)
 
 
 class MarginBalance(BrokerModel):
@@ -170,7 +183,7 @@ class MarginBalance(BrokerModel):
 class AccountBalanceResponse(BrokerModel):
     account_id: str = Field(alias="accountId")
     institution_type: str | None = Field(default=None, alias="institutionType")
-    as_of_date: int | None = Field(default=None, alias="asOfDate")
+    as_of_date: date | None = Field(default=None, alias="asOfDate")
     account_type: str | None = Field(default=None, alias="accountType")
     option_level: str | None = Field(default=None, alias="optionLevel")
     account_description: str | None = Field(default=None, alias="accountDescription")
@@ -183,6 +196,11 @@ class AccountBalanceResponse(BrokerModel):
     margin: MarginBalance | None = Field(default=None, alias="margin")
     lending: LendingBalance | None = Field(default=None, alias="lending")
     computed_balance: ComputedBalance | None = Field(default=None, alias="computedBalance")
+
+    @field_validator("as_of_date", mode="before")
+    @classmethod
+    def parse_as_of_date(cls, value: object) -> date | None:
+        return parse_broker_date(value)
 
     @field_validator("open_calls", mode="before")
     @classmethod

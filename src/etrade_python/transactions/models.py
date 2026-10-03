@@ -1,9 +1,12 @@
 """Typed transaction request and response models."""
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from etrade_python._dates import parse_broker_datetime
 
 
 class BrokerModel(BaseModel):
@@ -126,8 +129,8 @@ class TransactionBrokerage(BrokerModel):
 class Transaction(BrokerModel):
     transaction_id: int | str | None = Field(default=None, alias="transactionId")
     account_id: int | str | None = Field(default=None, alias="accountId")
-    transaction_date: int | None = Field(default=None, alias="transactionDate")
-    post_date: int | None = Field(default=None, alias="postDate")
+    transaction_date: datetime | None = Field(default=None, alias="transactionDate")
+    post_date: datetime | None = Field(default=None, alias="postDate")
     amount: Decimal | None = None
     description: str | None = None
     transaction_type: str | None = Field(default=None, alias="transactionType")
@@ -135,6 +138,11 @@ class Transaction(BrokerModel):
     store_id: int | str | None = Field(default=None, alias="storeId")
     category: TransactionCategory | None = None
     brokerage: TransactionBrokerage | None = None
+
+    @field_validator("transaction_date", "post_date", mode="before")
+    @classmethod
+    def parse_transaction_dates(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
 
     @model_validator(mode="before")
     @classmethod

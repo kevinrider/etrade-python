@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -111,6 +112,7 @@ async def test_transactions_list_contract(
 
     transaction = response.transactions[0]
     assert transaction.transaction_id == "99"
+    assert transaction.transaction_date == datetime(2026, 1, 1, tzinfo=UTC)
     assert transaction.amount == Decimal("-12.34")
     assert transaction.brokerage is not None
     assert transaction.brokerage.product is not None

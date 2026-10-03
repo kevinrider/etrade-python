@@ -58,17 +58,19 @@ async def test_accounts_list_contract(settings: ETradeSettings, auth: FakeAuthen
     assert auth.calls == 1
     assert response == AccountListResponse(
         accounts=[
-            Account(
-                accountId="840104290",
-                accountIdKey="JIdOIAcSpwR1Jva7RQBraQ",
-                accountMode="MARGIN",
-                accountDesc="INDIVIDUAL",
-                accountName="Individual Brokerage",
-                accountType="INDIVIDUAL",
-                institutionType="BROKERAGE",
-                accountStatus="ACTIVE",
-                closedDate=0,
-                broker_metadata={"newBrokerField": "kept"},
+            Account.model_validate(
+                {
+                    "accountId": "840104290",
+                    "accountIdKey": "JIdOIAcSpwR1Jva7RQBraQ",
+                    "accountMode": "MARGIN",
+                    "accountDesc": "INDIVIDUAL",
+                    "accountName": "Individual Brokerage",
+                    "accountType": "INDIVIDUAL",
+                    "institutionType": "BROKERAGE",
+                    "accountStatus": "ACTIVE",
+                    "closedDate": 0,
+                    "newBrokerField": "kept",
+                }
             )
         ]
     )

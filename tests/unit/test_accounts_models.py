@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -26,6 +27,18 @@ def test_account_preserves_broker_metadata() -> None:
     assert account.account_mode == "MARGIN"
     assert account.broker_metadata == {"futureField": "kept"}
     assert "futureField" not in account.model_dump()
+
+
+def test_account_closed_date_uses_date_and_zero_is_none() -> None:
+    active_account = Account.model_validate(
+        {"accountId": "123456", "accountIdKey": "fake-key", "closedDate": 0}
+    )
+    closed_account = Account.model_validate(
+        {"accountId": "123456", "accountIdKey": "fake-key", "closedDate": 20261003}
+    )
+
+    assert active_account.closed_date is None
+    assert closed_account.closed_date == date(2026, 10, 3)
 
 
 def test_account_list_response_contains_accounts() -> None:
@@ -61,6 +74,7 @@ def test_account_balance_decimal_and_nested_models() -> None:
     balance = AccountBalanceResponse.model_validate(
         {
             "accountId": "123456",
+            "asOfDate": 20261003,
             "computedBalance": {
                 "cashAvailableForInvestment": "12.34",
                 "cashBalance": Decimal("56.78"),
@@ -68,6 +82,7 @@ def test_account_balance_decimal_and_nested_models() -> None:
                 "portfolioMargin": {"totalMarginRqmts": "5.00"},
             },
             "openCalls": {"houseCall": "1.25"},
+            "lending": {"paymentDueDate": 20261004, "lastPaymentReceivedDate": 20261001},
             "futureBalanceField": "kept",
         }
     )
@@ -78,4 +93,8 @@ def test_account_balance_decimal_and_nested_models() -> None:
     assert balance.computed_balance.real_time_values is not None
     assert balance.computed_balance.real_time_values.total_account_value == Decimal("100.01")
     assert balance.open_calls[0].house_call == Decimal("1.25")
+    assert balance.as_of_date == date(2026, 10, 3)
+    assert balance.lending is not None
+    assert balance.lending.payment_due_date == date(2026, 10, 4)
+    assert balance.lending.last_payment_received_date == date(2026, 10, 1)
     assert balance.broker_metadata == {"futureBalanceField": "kept"}

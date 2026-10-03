@@ -1,9 +1,12 @@
 """Typed portfolio request and response models."""
 
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from etrade_python._dates import parse_broker_date, parse_broker_datetime
 
 
 class BrokerModel(BaseModel):
@@ -80,7 +83,7 @@ class PortfolioProduct(BrokerModel):
 
 class QuickView(BrokerModel):
     last_trade: Decimal | None = Field(default=None, alias="lastTrade")
-    last_trade_time: int | None = Field(default=None, alias="lastTradeTime")
+    last_trade_time: datetime | None = Field(default=None, alias="lastTradeTime")
     change: Decimal | None = None
     change_pct: Decimal | None = Field(default=None, alias="changePct")
     volume: int | None = None
@@ -88,6 +91,11 @@ class QuickView(BrokerModel):
     seven_day_current_yield: Decimal | None = Field(default=None, alias="sevenDayCurrentYield")
     annual_total_return: Decimal | None = Field(default=None, alias="annualTotalReturn")
     weighted_average_maturity: Decimal | None = Field(default=None, alias="weightedAverageMaturity")
+
+    @field_validator("last_trade_time", mode="before")
+    @classmethod
+    def parse_last_trade_time(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
 
 
 class PerformanceView(BrokerModel):
@@ -99,12 +107,17 @@ class PerformanceView(BrokerModel):
     total_gain_pct: Decimal | None = Field(default=None, alias="totalGainPct")
     market_value: Decimal | None = Field(default=None, alias="marketValue")
     quote_status: str | None = Field(default=None, alias="quoteStatus")
-    last_trade_time: int | None = Field(default=None, alias="lastTradeTime")
+    last_trade_time: datetime | None = Field(default=None, alias="lastTradeTime")
+
+    @field_validator("last_trade_time", mode="before")
+    @classmethod
+    def parse_last_trade_time(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
 
 
 class FundamentalView(BrokerModel):
     last_trade: Decimal | None = Field(default=None, alias="lastTrade")
-    last_trade_time: int | None = Field(default=None, alias="lastTradeTime")
+    last_trade_time: datetime | None = Field(default=None, alias="lastTradeTime")
     change: Decimal | None = None
     change_pct: Decimal | None = Field(default=None, alias="changePct")
     pe_ratio: Decimal | None = Field(default=None, alias="peRatio")
@@ -115,6 +128,11 @@ class FundamentalView(BrokerModel):
     week52_range: str | None = Field(default=None, alias="week52Range")
     quote_status: str | None = Field(default=None, alias="quoteStatus")
 
+    @field_validator("last_trade_time", mode="before")
+    @classmethod
+    def parse_last_trade_time(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
+
 
 class OptionsWatchView(BrokerModel):
     base_symbol_and_price: str | None = Field(default=None, alias="baseSymbolAndPrice")
@@ -123,7 +141,12 @@ class OptionsWatchView(BrokerModel):
     bid: Decimal | None = None
     ask: Decimal | None = None
     quote_status: str | None = Field(default=None, alias="quoteStatus")
-    last_trade_time: int | None = Field(default=None, alias="lastTradeTime")
+    last_trade_time: datetime | None = Field(default=None, alias="lastTradeTime")
+
+    @field_validator("last_trade_time", mode="before")
+    @classmethod
+    def parse_last_trade_time(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
 
 
 class CompleteView(BrokerModel):
@@ -136,11 +159,23 @@ class CompleteView(BrokerModel):
     adj_prev_close: Decimal | None = Field(default=None, alias="adjPrevClose")
     volume: Decimal | None = None
     last_trade: Decimal | None = Field(default=None, alias="lastTrade")
-    last_trade_time: int | None = Field(default=None, alias="lastTradeTime")
+    last_trade_time: datetime | None = Field(default=None, alias="lastTradeTime")
     symbol_description: str | None = Field(default=None, alias="symbolDescription")
     bid: Decimal | None = None
     ask: Decimal | None = None
     quote_status: str | None = Field(default=None, alias="quoteStatus")
+    div_pay_date: date | None = Field(default=None, alias="divPayDate")
+    ex_dividend_date: date | None = Field(default=None, alias="exDividendDate")
+
+    @field_validator("last_trade_time", mode="before")
+    @classmethod
+    def parse_last_trade_time(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
+
+    @field_validator("div_pay_date", "ex_dividend_date", mode="before")
+    @classmethod
+    def parse_dividend_dates(cls, value: object) -> date | None:
+        return parse_broker_date(value)
 
 
 class PositionLot(BrokerModel):
@@ -160,7 +195,7 @@ class PositionLot(BrokerModel):
     available_qty: Decimal | None = Field(default=None, alias="availableQty")
     order_no: int | None = Field(default=None, alias="orderNo")
     leg_no: int | None = Field(default=None, alias="legNo")
-    acquired_date: int | None = Field(default=None, alias="acquiredDate")
+    acquired_date: date | None = Field(default=None, alias="acquiredDate")
     location_code: int | None = Field(default=None, alias="locationCode")
     exchange_rate: Decimal | None = Field(default=None, alias="exchangeRate")
     settlement_currency: str | None = Field(default=None, alias="settlementCurrency")
@@ -170,6 +205,11 @@ class PositionLot(BrokerModel):
     fees_per_share: Decimal | None = Field(default=None, alias="feesPerShare")
     premium_adj: Decimal | None = Field(default=None, alias="premiumAdj")
     short_type: int | None = Field(default=None, alias="shortType")
+
+    @field_validator("acquired_date", mode="before")
+    @classmethod
+    def parse_acquired_date(cls, value: object) -> date | None:
+        return parse_broker_date(value)
 
 
 def _empty_position_lots() -> list[PositionLot]:
@@ -182,7 +222,7 @@ class Position(BrokerModel):
     product: PortfolioProduct | None = Field(default=None, alias="product")
     osi_key: str | None = Field(default=None, alias="osiKey")
     symbol_description: str | None = Field(default=None, alias="symbolDescription")
-    date_acquired: int | None = Field(default=None, alias="dateAcquired")
+    date_acquired: date | None = Field(default=None, alias="dateAcquired")
     price_paid: Decimal | None = Field(default=None, alias="pricePaid")
     price: Decimal | None = None
     commissions: Decimal | None = None
@@ -201,7 +241,7 @@ class Position(BrokerModel):
     pct_of_portfolio: Decimal | None = Field(default=None, alias="pctOfPortfolio")
     cost_per_share: Decimal | None = Field(default=None, alias="costPerShare")
     quote_status: str | None = Field(default=None, alias="quoteStatus")
-    date_time_utc: int | None = Field(default=None, alias="dateTimeUTC")
+    date_time_utc: datetime | None = Field(default=None, alias="dateTimeUTC")
     adj_prev_close: Decimal | None = Field(default=None, alias="adjPrevClose")
     performance: PerformanceView | None = None
     fundamental: FundamentalView | None = None
@@ -213,6 +253,16 @@ class Position(BrokerModel):
     position_lots: list[PositionLot] = Field(
         default_factory=_empty_position_lots, alias="positionLot"
     )
+
+    @field_validator("date_acquired", mode="before")
+    @classmethod
+    def parse_date_acquired(cls, value: object) -> date | None:
+        return parse_broker_date(value)
+
+    @field_validator("date_time_utc", mode="before")
+    @classmethod
+    def parse_date_time_utc(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
 
     @model_validator(mode="before")
     @classmethod
