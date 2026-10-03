@@ -8,6 +8,8 @@ from etrade_python.auth.session import SessionAuthenticator, SessionManager
 from etrade_python.auth.stores import CredentialStore, KeyringCredentialStore
 from etrade_python.config import ETradeSettings
 from etrade_python.exceptions import ETradeValidationError
+from etrade_python.portfolio.service import PortfolioService
+from etrade_python.transactions.service import TransactionsService
 from etrade_python.transport.auth import RequestAuthenticator
 from etrade_python.transport.http import ApiTransport
 from etrade_python.transport.retry import RetryPolicy
@@ -51,6 +53,8 @@ class ETradeClient:
             retry_policy=retry_policy,
         )
         self.accounts = AccountsService(self._transport)
+        self.portfolio = PortfolioService(self._transport)
+        self.transactions = TransactionsService(self._transport)
         self._closed = False
 
     @classmethod

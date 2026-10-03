@@ -39,6 +39,21 @@ from etrade_python.exceptions import (
     ETradeUnavailableError,
     ETradeValidationError,
 )
+from etrade_python.portfolio import (
+    PortfolioRequest,
+    PortfolioResponse,
+    PortfolioService,
+    Position,
+    PositionLot,
+)
+from etrade_python.transactions import (
+    Transaction,
+    TransactionDetailsRequest,
+    TransactionDetailsResponse,
+    TransactionsRequest,
+    TransactionsResponse,
+    TransactionsService,
+)
 
 __version__ = "0.1.0.dev0"
 __all__ = [
@@ -68,6 +83,17 @@ __all__ = [
     "Environment",
     "KeyringCredentialStore",
     "MemoryCredentialStore",
+    "PortfolioRequest",
+    "PortfolioResponse",
+    "PortfolioService",
+    "Position",
+    "PositionLot",
+    "Transaction",
+    "TransactionDetailsRequest",
+    "TransactionDetailsResponse",
+    "TransactionsRequest",
+    "TransactionsResponse",
+    "TransactionsService",
     "OAuthClient",
     "RenewalResult",
     "RequestToken",
