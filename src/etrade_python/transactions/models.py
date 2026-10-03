@@ -91,8 +91,8 @@ class TransactionProduct(BrokerModel):
 
 
 class TransactionCategory(BrokerModel):
-    category_id: str | None = Field(default=None, alias="categoryId")
-    parent_id: str | None = Field(default=None, alias="parentId")
+    category_id: int | str | None = Field(default=None, alias="categoryId")
+    parent_id: int | str | None = Field(default=None, alias="parentId")
     category_name: str | None = Field(default=None, alias="categoryName")
     parent_name: str | None = Field(default=None, alias="parentName")
 
@@ -106,8 +106,8 @@ class TransactionBrokerage(BrokerModel):
     payment_currency: str | None = Field(default=None, alias="paymentCurrency")
     fee: Decimal | None = None
     memo: str | None = None
-    check_no: str | None = Field(default=None, alias="checkNo")
-    order_no: str | None = Field(default=None, alias="orderNo")
+    check_no: int | str | None = Field(default=None, alias="checkNo")
+    order_no: int | str | None = Field(default=None, alias="orderNo")
 
     @model_validator(mode="before")
     @classmethod
@@ -118,19 +118,21 @@ class TransactionBrokerage(BrokerModel):
         if "Product" in data and "product" not in data:
             data["product"] = data["Product"]
         data.pop("Product", None)
+        if data.get("product") == {}:
+            data["product"] = None
         return data
 
 
 class Transaction(BrokerModel):
-    transaction_id: str | None = Field(default=None, alias="transactionId")
-    account_id: str | None = Field(default=None, alias="accountId")
+    transaction_id: int | str | None = Field(default=None, alias="transactionId")
+    account_id: int | str | None = Field(default=None, alias="accountId")
     transaction_date: int | None = Field(default=None, alias="transactionDate")
     post_date: int | None = Field(default=None, alias="postDate")
     amount: Decimal | None = None
     description: str | None = None
     transaction_type: str | None = Field(default=None, alias="transactionType")
     inst_type: str | None = Field(default=None, alias="instType")
-    store_id: str | None = Field(default=None, alias="storeId")
+    store_id: int | str | None = Field(default=None, alias="storeId")
     category: TransactionCategory | None = None
     brokerage: TransactionBrokerage | None = None
 
@@ -144,6 +146,8 @@ class Transaction(BrokerModel):
             if source in data and target not in data:
                 data[target] = data[source]
             data.pop(source, None)
+            if data.get(target) == {}:
+                data[target] = None
         return data
 
 
