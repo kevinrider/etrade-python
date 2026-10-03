@@ -1,0 +1,75 @@
+from decimal import Decimal
+
+import pytest
+
+from etrade_python import (
+    TransactionDetailsRequest,
+    TransactionDetailsResponse,
+    TransactionsRequest,
+    TransactionsResponse,
+)
+
+
+def test_transactions_request_query_params() -> None:
+    request = TransactionsRequest(
+        marker="123",
+        count=10,
+        start_date="01012026",
+        end_date="01312026",
+        sort_order="DESC",
+    )
+
+    assert request.query_params() == {
+        "marker": "123",
+        "count": 10,
+        "startDate": "01012026",
+        "endDate": "01312026",
+        "sortOrder": "DESC",
+    }
+
+
+def test_transactions_request_requires_date_pair() -> None:
+    with pytest.raises(ValueError, match="start_date and end_date"):
+        TransactionsRequest(start_date="01012026")
+
+
+def test_transaction_details_request_query_params() -> None:
+    assert TransactionDetailsRequest(store_id="bank").query_params() == {"storeId": "bank"}
+
+
+def test_transactions_response_parses_nested_aliases_and_decimals() -> None:
+    response = TransactionsResponse.model_validate(
+        {
+            "Transaction": {
+                "transactionId": "99",
+                "amount": "-12.34",
+                "Category": {"categoryName": "Dividends"},
+                "Brokerage": {
+                    "transactionType": "Bought",
+                    "Product": {"symbol": "MSFT", "securityType": "EQ"},
+                    "quantity": "1",
+                    "price": "100.50",
+                },
+                "futureField": "kept",
+            },
+            "pageMarkers": "88",
+        }
+    )
+
+    transaction = response.transactions[0]
+    assert response.page_markers == "88"
+    assert transaction.amount == Decimal("-12.34")
+    assert transaction.category is not None
+    assert transaction.category.category_name == "Dividends"
+    assert transaction.brokerage is not None
+    assert transaction.brokerage.price == Decimal("100.50")
+    assert transaction.brokerage.product is not None
+    assert transaction.brokerage.product.symbol == "MSFT"
+    assert transaction.broker_metadata == {"futureField": "kept"}
+
+
+def test_transaction_details_response_wraps_transaction_payload() -> None:
+    response = TransactionDetailsResponse.model_validate({"transactionId": "99", "amount": "1.23"})
+
+    assert response.transaction.transaction_id == "99"
+    assert response.transaction.amount == Decimal("1.23")
