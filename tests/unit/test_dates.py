@@ -26,3 +26,9 @@ def test_parse_broker_date_from_iso_date_string() -> None:
 def test_parse_broker_zero_and_blank_as_none() -> None:
     assert parse_broker_datetime(0) is None
     assert parse_broker_date("") is None
+
+
+def test_parse_broker_datetime_from_etrade_quote_timestamp() -> None:
+    assert parse_broker_datetime("15:17:00 EDT 06-20-2018") == datetime(
+        2018, 6, 20, 19, 17, tzinfo=UTC
+    )

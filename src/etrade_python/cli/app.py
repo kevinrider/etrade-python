@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import Coroutine
 from decimal import Decimal
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 from pydantic import BaseModel
@@ -12,8 +12,16 @@ from etrade_python import (
     AccountBalanceRequest,
     AccountBalanceResponse,
     AccountListResponse,
+    OptionChainRequest,
+    OptionChainResponse,
+    OptionExpirationsRequest,
+    OptionExpirationsResponse,
     PortfolioRequest,
     PortfolioResponse,
+    ProductLookupResponse,
+    Quote,
+    QuotesRequest,
+    QuotesResponse,
     TransactionDetailsRequest,
     TransactionDetailsResponse,
     TransactionsRequest,
@@ -30,10 +38,12 @@ auth_app = typer.Typer(no_args_is_help=True)
 accounts_app = typer.Typer(no_args_is_help=True)
 portfolio_app = typer.Typer(no_args_is_help=True)
 transactions_app = typer.Typer(no_args_is_help=True)
+market_app = typer.Typer(no_args_is_help=True)
 app.add_typer(auth_app, name="auth")
 app.add_typer(accounts_app, name="accounts")
 app.add_typer(portfolio_app, name="portfolio")
 app.add_typer(transactions_app, name="transactions")
+app.add_typer(market_app, name="market")
 
 
 def _run(coro: Coroutine[Any, Any, object]) -> object:
@@ -243,6 +253,145 @@ def get_transaction(
     _handle(command())
 
 
+@market_app.command("quote")
+def market_quote(
+    symbol: str = typer.Argument(..., help="Equity, index, mutual fund, or option symbol."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    detail_flag: str | None = typer.Option(None, "--detail-flag"),
+    require_earnings_date: bool | None = typer.Option(
+        None, "--require-earnings-date/--no-require-earnings-date"
+    ),
+    skip_mini_options_check: bool | None = typer.Option(
+        None, "--skip-mini-options-check/--check-mini-options"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Show a market quote."""
+
+    async def command() -> None:
+        request = QuotesRequest(
+            detail_flag=detail_flag,
+            require_earnings_date=require_earnings_date,
+            skip_mini_options_check=skip_mini_options_check,
+        )
+        async with ETradeClient(_settings(), profile=profile) as client:
+            quote = await client.market.get_quote(symbol, request)
+            if json_output:
+                _echo_json(quote)
+                return
+            _echo_quote(quote)
+
+    _handle(command())
+
+
+@market_app.command("quotes")
+def market_quotes(
+    symbols: Annotated[list[str], typer.Argument(help="One or more market symbols.")],
+    profile: str = typer.Option("default", "--profile", "-p"),
+    detail_flag: str | None = typer.Option(None, "--detail-flag"),
+    override_symbol_count: bool | None = typer.Option(
+        None, "--override-symbol-count/--no-override-symbol-count"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Show market quotes for one or more symbols."""
+
+    async def command() -> None:
+        request = QuotesRequest(
+            detail_flag=detail_flag,
+            override_symbol_count=override_symbol_count,
+        )
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.market.get_quotes(symbols, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_quotes(response)
+
+    _handle(command())
+
+
+@market_app.command("lookup")
+def market_lookup(
+    search: str = typer.Argument(..., help="Company name search text."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Look up products by company name."""
+
+    async def command() -> None:
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.market.lookup_product(search)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_product_lookup(response)
+
+    _handle(command())
+
+
+@market_app.command("option-expirations")
+def market_option_expirations(
+    symbol: str = typer.Argument(..., help="Underlying market symbol."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    expiry_type: str | None = typer.Option(None, "--expiry-type"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Show option expiration dates for an underlying symbol."""
+
+    async def command() -> None:
+        request = OptionExpirationsRequest(expiry_type=expiry_type)
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.market.get_option_expirations(symbol, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_option_expirations(response)
+
+    _handle(command())
+
+
+@market_app.command("option-chain")
+def market_option_chain(
+    symbol: str = typer.Argument(..., help="Underlying market symbol."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    expiry_year: int | None = typer.Option(None, "--expiry-year"),
+    expiry_month: int | None = typer.Option(None, "--expiry-month"),
+    expiry_day: int | None = typer.Option(None, "--expiry-day"),
+    strike_price_near: str | None = typer.Option(None, "--strike-price-near"),
+    no_of_strikes: int | None = typer.Option(None, "--no-of-strikes"),
+    chain_type: str | None = typer.Option(None, "--chain-type"),
+    option_category: str | None = typer.Option(None, "--option-category"),
+    price_type: str | None = typer.Option(None, "--price-type"),
+    include_weekly: bool | None = typer.Option(None, "--include-weekly/--exclude-weekly"),
+    skip_adjusted: bool | None = typer.Option(None, "--skip-adjusted/--include-adjusted"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Show an option chain for an underlying symbol."""
+
+    async def command() -> None:
+        request = OptionChainRequest(
+            expiry_year=expiry_year,
+            expiry_month=expiry_month,
+            expiry_day=expiry_day,
+            strike_price_near=Decimal(strike_price_near) if strike_price_near is not None else None,
+            no_of_strikes=no_of_strikes,
+            chain_type=chain_type,
+            option_category=option_category,
+            price_type=price_type,
+            include_weekly=include_weekly,
+            skip_adjusted=skip_adjusted,
+        )
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.market.get_option_chain(symbol, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_option_chain(response)
+
+    _handle(command())
+
+
 def _echo_json(model: BaseModel) -> None:
     typer.echo(model.model_dump_json(by_alias=True, exclude_none=True, indent=2))
 
@@ -330,6 +479,69 @@ def _echo_transaction_details(response: TransactionDetailsResponse) -> None:
             _echo_optional("Symbol", transaction.brokerage.product.symbol)
         _echo_optional_decimal("Quantity", transaction.brokerage.quantity)
         _echo_optional_decimal("Price", transaction.brokerage.price)
+
+
+def _echo_quote(quote: Quote) -> None:
+    symbol = quote.product.symbol if quote.product is not None else None
+    details = quote.all or quote.intraday or quote.fundamental or quote.option or quote.week52
+    typer.echo(symbol or "Quote")
+    _echo_optional("  Status", quote.quote_status)
+    if details is not None:
+        _echo_optional("  Company", details.company_name or details.symbol_description)
+        _echo_optional_decimal("  Last trade", details.last_trade)
+        _echo_optional_decimal("  Bid", details.bid)
+        _echo_optional_decimal("  Ask", details.ask)
+        _echo_optional_decimal("  Change", details.change_close)
+        _echo_optional("  Volume", details.total_volume)
+
+
+def _echo_quotes(response: QuotesResponse) -> None:
+    if not response.quotes:
+        typer.echo("No quotes found.")
+        return
+    for quote in response.quotes:
+        _echo_quote(quote)
+
+
+def _echo_product_lookup(response: ProductLookupResponse) -> None:
+    if not response.products:
+        typer.echo("No products found.")
+        return
+    for product in response.products:
+        typer.echo(product.symbol or "Product")
+        _echo_optional("  Description", product.description)
+        _echo_optional("  Type", product.type)
+
+
+def _echo_option_expirations(response: OptionExpirationsResponse) -> None:
+    if not response.expiration_dates:
+        typer.echo("No option expirations found.")
+        return
+    for expiration in response.expiration_dates:
+        if expiration.year is None or expiration.month is None or expiration.day is None:
+            typer.echo("Expiration")
+        else:
+            typer.echo(f"{expiration.year:04d}-{expiration.month:02d}-{expiration.day:02d}")
+        _echo_optional("  Type", expiration.expiry_type)
+
+
+def _echo_option_chain(response: OptionChainResponse) -> None:
+    _echo_optional("Quote type", response.quote_type)
+    _echo_optional_decimal("Near price", response.near_price)
+    if not response.option_pairs:
+        typer.echo("No option pairs found.")
+        return
+    for pair in response.option_pairs:
+        if pair.call is not None:
+            typer.echo(pair.call.display_symbol or pair.call.osi_key or "Call")
+            _echo_optional_decimal("  Strike", pair.call.strike_price)
+            _echo_optional_decimal("  Bid", pair.call.bid)
+            _echo_optional_decimal("  Ask", pair.call.ask)
+        if pair.put is not None:
+            typer.echo(pair.put.display_symbol or pair.put.osi_key or "Put")
+            _echo_optional_decimal("  Strike", pair.put.strike_price)
+            _echo_optional_decimal("  Bid", pair.put.bid)
+            _echo_optional_decimal("  Ask", pair.put.ask)
 
 
 def _echo_optional(label: str, value: object | None) -> None:

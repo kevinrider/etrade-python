@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 def parse_broker_datetime(value: Any) -> datetime | None:
@@ -81,7 +82,11 @@ def _parse_string_datetime(value: str) -> datetime | None:
             continue
         return _ensure_timezone(parsed)
 
-    for fmt in ("%H:%M:%S %Z %m-%d-%Y", "%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y"):
+    quote_datetime = _parse_quote_datetime(value)
+    if quote_datetime is not None:
+        return quote_datetime
+
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y"):
         try:
             parsed = datetime.strptime(value, fmt)
         except ValueError:
@@ -89,6 +94,17 @@ def _parse_string_datetime(value: str) -> datetime | None:
         return _ensure_timezone(parsed)
 
     return None
+
+
+def _parse_quote_datetime(value: str) -> datetime | None:
+    parts = value.split()
+    if len(parts) != 3 or parts[1] not in {"EST", "EDT"}:
+        return None
+    try:
+        parsed = datetime.strptime(f"{parts[0]} {parts[2]}", "%H:%M:%S %m-%d-%Y")
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=ZoneInfo("America/New_York")).astimezone(UTC)
 
 
 def _string_datetime_candidates(value: str) -> tuple[str, ...]:

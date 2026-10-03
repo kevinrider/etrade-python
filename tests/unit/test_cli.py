@@ -10,8 +10,16 @@ from etrade_python import (
     AccountBalanceResponse,
     AccountListResponse,
     ETradeValidationError,
+    OptionChainRequest,
+    OptionChainResponse,
+    OptionExpirationsRequest,
+    OptionExpirationsResponse,
     PortfolioRequest,
     PortfolioResponse,
+    ProductLookupResponse,
+    Quote,
+    QuotesRequest,
+    QuotesResponse,
     TransactionDetailsRequest,
     TransactionDetailsResponse,
     TransactionsRequest,
@@ -173,6 +181,95 @@ class FakeTransactions:
         )
 
 
+class FakeMarket:
+    def __init__(self, client: "FakeClient") -> None:
+        self._client = client
+
+    async def get_quote(self, symbol: str, request: QuotesRequest | None = None) -> Quote:
+        self._client.market_quote_symbol = symbol
+        self._client.market_quote_request = request
+        return Quote.model_validate(
+            {
+                "Product": {"symbol": "GOOG", "securityType": "EQ"},
+                "quoteStatus": "REALTIME",
+                "All": {
+                    "companyName": "Alphabet Inc.",
+                    "lastTrade": Decimal("1175.74"),
+                    "bid": Decimal("1175.00"),
+                    "ask": Decimal("1176.00"),
+                    "totalVolume": 12345,
+                },
+            }
+        )
+
+    async def get_quotes(
+        self, symbols: list[str], request: QuotesRequest | None = None
+    ) -> QuotesResponse:
+        self._client.market_quotes_symbols = symbols
+        self._client.market_quotes_request = request
+        return QuotesResponse.model_validate(
+            {
+                "QuoteData": [
+                    {
+                        "Product": {"symbol": "GOOG", "securityType": "EQ"},
+                        "All": {"lastTrade": Decimal("1175.74")},
+                    },
+                    {
+                        "Product": {"symbol": "AAPL", "securityType": "EQ"},
+                        "All": {"lastTrade": Decimal("200.01")},
+                    },
+                ]
+            }
+        )
+
+    async def lookup_product(self, search: str) -> ProductLookupResponse:
+        self._client.market_lookup_search = search
+        return ProductLookupResponse.model_validate(
+            {
+                "Data": {
+                    "symbol": "A",
+                    "description": "Agilent Technologies Inc.",
+                    "type": "EQ",
+                }
+            }
+        )
+
+    async def get_option_expirations(
+        self, symbol: str, request: OptionExpirationsRequest | None = None
+    ) -> OptionExpirationsResponse:
+        self._client.market_option_expirations_symbol = symbol
+        self._client.market_option_expirations_request = request
+        return OptionExpirationsResponse.model_validate(
+            {"ExpirationDate": {"year": 2026, "month": 10, "day": 16, "expiryType": "MONTHLY"}}
+        )
+
+    async def get_option_chain(
+        self, symbol: str, request: OptionChainRequest | None = None
+    ) -> OptionChainResponse:
+        self._client.market_option_chain_symbol = symbol
+        self._client.market_option_chain_request = request
+        return OptionChainResponse.model_validate(
+            {
+                "quoteType": "DELAYED",
+                "nearPrice": Decimal("200"),
+                "OptionPair": {
+                    "Call": {
+                        "displaySymbol": "AAPL Oct 16 '26 $200 Call",
+                        "strikePrice": Decimal("200"),
+                        "bid": Decimal("3.20"),
+                        "ask": Decimal("3.40"),
+                    },
+                    "Put": {
+                        "displaySymbol": "AAPL Oct 16 '26 $200 Put",
+                        "strikePrice": Decimal("200"),
+                        "bid": Decimal("2.10"),
+                        "ask": Decimal("2.25"),
+                    },
+                },
+            }
+        )
+
+
 class FakeClient:
     instances: list["FakeClient"] = []
 
@@ -182,6 +279,7 @@ class FakeClient:
         self.accounts = FakeAccounts(self)
         self.portfolio = FakePortfolio(self)
         self.transactions = FakeTransactions(self)
+        self.market = FakeMarket(self)
         self.profile = profile
         self.balance_account_id_key: str | None = None
         self.balance_request: AccountBalanceRequest | None = None
@@ -192,6 +290,15 @@ class FakeClient:
         self.transaction_detail_account_id_key: str | None = None
         self.transaction_id: str | None = None
         self.transaction_details_request: TransactionDetailsRequest | None = None
+        self.market_quote_symbol: str | None = None
+        self.market_quote_request: QuotesRequest | None = None
+        self.market_quotes_symbols: list[str] | None = None
+        self.market_quotes_request: QuotesRequest | None = None
+        self.market_lookup_search: str | None = None
+        self.market_option_expirations_symbol: str | None = None
+        self.market_option_expirations_request: OptionExpirationsRequest | None = None
+        self.market_option_chain_symbol: str | None = None
+        self.market_option_chain_request: OptionChainRequest | None = None
         self.__class__.instances.append(self)
 
     async def __aenter__(self) -> "FakeClient":
@@ -422,3 +529,126 @@ def test_transaction_get_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 0
     assert '"transactionId": "99"' in result.output
     assert '"symbol": "MSFT"' in result.output
+
+
+def test_market_quote_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        [
+            "market",
+            "quote",
+            "goog",
+            "--detail-flag",
+            "all",
+            "--require-earnings-date",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "GOOG" in result.output
+    assert "Company: Alphabet Inc." in result.output
+    assert "Last trade: 1175.74" in result.output
+    client = FakeClient.instances[0]
+    assert client.market_quote_symbol == "goog"
+    assert client.market_quote_request == QuotesRequest(
+        detail_flag="ALL", require_earnings_date=True
+    )
+
+
+def test_market_quote_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["market", "quote", "GOOG", "--json"])
+
+    assert result.exit_code == 0
+    assert '"symbol": "GOOG"' in result.output
+    assert '"lastTrade": "1175.74"' in result.output
+
+
+def test_market_quotes_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["market", "quotes", "GOOG", "AAPL", "--override-symbol-count"],
+    )
+
+    assert result.exit_code == 0
+    assert "GOOG" in result.output
+    assert "AAPL" in result.output
+    client = FakeClient.instances[0]
+    assert client.market_quotes_symbols == ["GOOG", "AAPL"]
+    assert client.market_quotes_request == QuotesRequest(override_symbol_count=True)
+
+
+def test_market_lookup_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["market", "lookup", "agilent"])
+
+    assert result.exit_code == 0
+    assert "A" in result.output
+    assert "Agilent Technologies Inc." in result.output
+    assert FakeClient.instances[0].market_lookup_search == "agilent"
+
+
+def test_market_option_expirations_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app, ["market", "option-expirations", "AAPL", "--expiry-type", "monthly"]
+    )
+
+    assert result.exit_code == 0
+    assert "2026-10-16" in result.output
+    assert "Type: MONTHLY" in result.output
+    client = FakeClient.instances[0]
+    assert client.market_option_expirations_symbol == "AAPL"
+    assert client.market_option_expirations_request == OptionExpirationsRequest(
+        expiry_type="MONTHLY"
+    )
+
+
+def test_market_option_chain_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        [
+            "market",
+            "option-chain",
+            "AAPL",
+            "--expiry-year",
+            "2026",
+            "--expiry-month",
+            "10",
+            "--expiry-day",
+            "16",
+            "--chain-type",
+            "callput",
+            "--include-weekly",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Quote type: DELAYED" in result.output
+    assert "AAPL Oct 16 '26 $200 Call" in result.output
+    assert "Ask: 3.40" in result.output
+    assert "AAPL Oct 16 '26 $200 Put" in result.output
+    client = FakeClient.instances[0]
+    assert client.market_option_chain_symbol == "AAPL"
+    assert client.market_option_chain_request == OptionChainRequest(
+        expiry_year=2026,
+        expiry_month=10,
+        expiry_day=16,
+        chain_type="CALLPUT",
+        include_weekly=True,
+    )
