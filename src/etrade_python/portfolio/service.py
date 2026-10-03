@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from etrade_python.exceptions import ETradeResponseError, ETradeValidationError
 from etrade_python.portfolio.models import PortfolioRequest, PortfolioResponse, Position
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue
+from etrade_python.transport.response import JsonValue, raise_response_validation_error
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -40,8 +40,8 @@ class PortfolioService:
             raise ETradeResponseError("Invalid portfolio response")
         try:
             return PortfolioResponse.model_validate(portfolio_data)
-        except ValidationError:
-            raise ETradeResponseError("Invalid portfolio response") from None
+        except ValidationError as error:
+            raise_response_validation_error("Invalid portfolio response", error)
 
     async def iter_positions(
         self, account_id_key: str, request: PortfolioRequest | None = None

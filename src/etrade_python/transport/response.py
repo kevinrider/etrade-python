@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import TypeAlias, cast
+from typing import NoReturn, TypeAlias, cast
 from urllib.parse import quote, quote_plus, unquote
 from xml.etree import ElementTree
 
@@ -74,6 +74,63 @@ def correlation_id(response: httpx.Response, redactor: Redactor) -> str | None:
     return None
 
 
+def response_diagnostic(response: httpx.Response, redactor: Redactor) -> str:
+    """Return a short sanitized response summary for parser diagnostics."""
+    content_type = response.headers.get("content-type", "<missing>").split(";", 1)[0].strip()
+    content_length = len(response.content)
+    preview = _body_preview(response.content, redactor)
+    parts = [
+        f"status={response.status_code}",
+        f"content_type={content_type or '<missing>'}",
+        f"bytes={content_length}",
+    ]
+    if preview:
+        parts.append(f"body_preview={preview}")
+    return ", ".join(parts)
+
+
+def validation_diagnostic(error: object, *, prefix: str | None = None) -> str:
+    """Return sanitized Pydantic validation locations without rejected values."""
+    errors = getattr(error, "errors", None)
+    if not callable(errors):
+        return "validation failed"
+    paths: list[str] = []
+    raw_errors = cast(list[dict[str, object]], errors())
+    for item in raw_errors:
+        loc = item.get("loc")
+        if not isinstance(loc, tuple) or not loc:
+            continue
+        location = cast(tuple[object, ...], loc)
+        rendered = ".".join(str(part) for part in location)
+        if prefix:
+            rendered = f"{prefix}.{rendered}"
+        paths.append(rendered)
+    if not paths:
+        return "validation failed"
+    unique_paths = list(dict.fromkeys(paths))
+    if len(unique_paths) > 5:
+        return "; ".join(unique_paths[:5]) + f"; +{len(unique_paths) - 5} more"
+    return "; ".join(unique_paths)
+
+
+def raise_response_validation_error(
+    message: str, error: object, *, prefix: str | None = None
+) -> NoReturn:
+    """Raise a sanitized response validation error from a model parser failure."""
+    diagnostic = validation_diagnostic(error, prefix=prefix)
+    raise ETradeResponseError(f"{message}: {diagnostic}") from None
+
+
+def _body_preview(content: bytes, redactor: Redactor) -> str | None:
+    if not content:
+        return None
+    preview = content[:300].decode("utf-8", errors="replace")
+    cleaned = redactor.clean(preview)
+    if len(content) > 300:
+        cleaned = f"{cleaned}..."
+    return cleaned
+
+
 def parse_response(response: httpx.Response, redactor: Redactor) -> TransportResponse:
     request_id = correlation_id(response, redactor)
     if response.status_code == 204:
@@ -82,12 +139,18 @@ def parse_response(response: httpx.Response, redactor: Redactor) -> TransportRes
         raise api_error(response, redactor)
     content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if content_type != "application/json" and not content_type.endswith("+json"):
-        raise ETradeResponseError("Expected a JSON response", status_code=response.status_code)
+        raise ETradeResponseError(
+            f"Expected a JSON response ({response_diagnostic(response, redactor)})",
+            status_code=response.status_code,
+            request_id=request_id,
+        )
     try:
         data = decode_json(response.content)
     except (ValueError, UnicodeError, RecursionError):
         raise ETradeResponseError(
-            "Invalid JSON response", status_code=response.status_code, request_id=request_id
+            f"Invalid JSON response ({response_diagnostic(response, redactor)})",
+            status_code=response.status_code,
+            request_id=request_id,
         ) from None
     return TransportResponse(response.status_code, data, request_id)
 

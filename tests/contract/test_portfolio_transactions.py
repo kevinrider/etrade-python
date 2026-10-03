@@ -125,6 +125,50 @@ async def test_transactions_reject_blank_ids(
             await service.get("fake-key", " ")
 
 
+async def test_portfolio_validation_diagnostic_reports_field_path(
+    settings: ETradeSettings, auth: FakeAuthenticator
+) -> None:
+    payload = {
+        "PortfolioResponse": {
+            "AccountPortfolio": {
+                "Position": {"Product": {"symbol": "AAPL"}, "quantity": "not-a-decimal"}
+            }
+        }
+    }
+
+    async with ApiTransport(
+        settings,
+        authenticator=auth,
+        http_transport=httpx.MockTransport(lambda r: httpx.Response(200, json=payload)),
+    ) as transport:
+        with pytest.raises(ETradeResponseError) as exc:
+            await PortfolioService(transport).get_positions("fake-key")
+
+    message = str(exc.value)
+    assert "Invalid portfolio response" in message
+    assert "quantity" in message
+    assert "not-a-decimal" not in message
+
+
+async def test_transactions_validation_diagnostic_reports_field_path(
+    settings: ETradeSettings, auth: FakeAuthenticator
+) -> None:
+    payload = {"TransactionListResponse": {"Transaction": {"amount": "not-a-decimal"}}}
+
+    async with ApiTransport(
+        settings,
+        authenticator=auth,
+        http_transport=httpx.MockTransport(lambda r: httpx.Response(200, json=payload)),
+    ) as transport:
+        with pytest.raises(ETradeResponseError) as exc:
+            await TransactionsService(transport).list("fake-key")
+
+    message = str(exc.value)
+    assert "Invalid transactions response" in message
+    assert "amount" in message
+    assert "not-a-decimal" not in message
+
+
 async def test_invalid_portfolio_response_is_structured(
     settings: ETradeSettings, auth: FakeAuthenticator
 ) -> None:

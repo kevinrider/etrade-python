@@ -12,7 +12,7 @@ from etrade_python.accounts.models import (
 )
 from etrade_python.exceptions import ETradeResponseError, ETradeValidationError
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue
+from etrade_python.transport.response import JsonValue, raise_response_validation_error
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -48,12 +48,15 @@ class AccountsService:
         else:
             raise ETradeResponseError("Invalid account list response")
 
-        try:
-            return AccountListResponse(
-                accounts=[Account.model_validate(account) for account in raw_accounts]
-            )
-        except ValidationError:
-            raise ETradeResponseError("Invalid account list response") from None
+        accounts: list[Account] = []
+        for index, account in enumerate(raw_accounts):
+            try:
+                accounts.append(Account.model_validate(account))
+            except ValidationError as error:
+                raise_response_validation_error(
+                    "Invalid account list response", error, prefix=f"accounts.{index}"
+                )
+        return AccountListResponse(accounts=accounts)
 
     async def get_balance(
         self, account_id_key: str, request: AccountBalanceRequest | None = None
@@ -73,8 +76,8 @@ class AccountsService:
         balance_data = _unwrap(data, "BalanceResponse")
         try:
             return AccountBalanceResponse.model_validate(_normalize_balance(balance_data))
-        except ValidationError:
-            raise ETradeResponseError("Invalid account balance response") from None
+        except ValidationError as error:
+            raise_response_validation_error("Invalid account balance response", error)
 
 
 def _require_mapping(data: JsonValue) -> dict[str, Any]:

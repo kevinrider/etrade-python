@@ -14,7 +14,7 @@ from etrade_python.transactions.models import (
     TransactionsResponse,
 )
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue
+from etrade_python.transport.response import JsonValue, raise_response_validation_error
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -44,8 +44,8 @@ class TransactionsService:
         transactions_data = _unwrap(data, "TransactionListResponse")
         try:
             return TransactionsResponse.model_validate(transactions_data)
-        except ValidationError:
-            raise ETradeResponseError("Invalid transactions response") from None
+        except ValidationError as error:
+            raise_response_validation_error("Invalid transactions response", error)
 
     async def get(
         self,
@@ -70,8 +70,8 @@ class TransactionsService:
         transaction_data = _unwrap(data, "TransactionDetailsResponse")
         try:
             return TransactionDetailsResponse.model_validate(transaction_data)
-        except ValidationError:
-            raise ETradeResponseError("Invalid transaction details response") from None
+        except ValidationError as error:
+            raise_response_validation_error("Invalid transaction details response", error)
 
     async def iter_all(
         self, account_id_key: str, request: TransactionsRequest | None = None

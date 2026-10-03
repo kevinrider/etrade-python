@@ -3,6 +3,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
 from etrade_python import (
     ETradeApiError,
@@ -13,7 +14,11 @@ from etrade_python import (
     ETradeResponseError,
     ETradeUnavailableError,
 )
-from etrade_python.transport.response import Redactor, parse_response
+from etrade_python.transport.response import (
+    Redactor,
+    parse_response,
+    raise_response_validation_error,
+)
 
 
 @pytest.mark.parametrize(
@@ -94,16 +99,60 @@ def test_precision_and_no_content() -> None:
 
 @pytest.mark.parametrize("content", [b"", b"{", b'{"x":NaN}', b'{"x":Infinity}', b"\xff"])
 def test_invalid_success(content: bytes) -> None:
-    with pytest.raises(ETradeResponseError, match="Invalid JSON"):
+    with pytest.raises(ETradeResponseError, match="Invalid JSON") as exc:
         parse_response(
             httpx.Response(200, content=content, headers={"Content-Type": "application/json"}),
             Redactor([]),
         )
+    message = str(exc.value)
+    assert "status=200" in message
+    assert "content_type=application/json" in message
+    assert "bytes=" in message
+
+
+def test_invalid_success_diagnostic_is_redacted() -> None:
+    with pytest.raises(ETradeResponseError) as exc:
+        parse_response(
+            httpx.Response(
+                200,
+                content=b'{"oauth_token":"fake-access-token", "account":"fake-account-key",',
+                headers={"Content-Type": "application/json"},
+            ),
+            Redactor(["fake-access-token", "fake-account-key"]),
+        )
+
+    message = str(exc.value)
+    assert "body_preview=" in message
+    assert "[REDACTED]" in message
+    assert "fake-access-token" not in message
+    assert "fake-account-key" not in message
 
 
 def test_wrong_media_type() -> None:
-    with pytest.raises(ETradeResponseError, match="Expected a JSON"):
+    with pytest.raises(ETradeResponseError, match="Expected a JSON") as exc:
         parse_response(httpx.Response(200, text="<xml/>"), Redactor([]))
+
+    message = str(exc.value)
+    assert "status=200" in message
+    assert "content_type=text/plain" in message
+    assert "body_preview=<xml/>" in message
+
+
+def test_raise_response_validation_error_reports_paths_without_values() -> None:
+    class ExampleModel(BaseModel):
+        amount: Decimal
+
+    with pytest.raises(ValueError) as validation_exc:
+        ExampleModel.model_validate({"amount": "fake-secret-value"})
+
+    with pytest.raises(ETradeResponseError) as exc:
+        raise_response_validation_error(
+            "Invalid example response", validation_exc.value, prefix="example.0"
+        )
+
+    message = str(exc.value)
+    assert message == "Invalid example response: example.0.amount"
+    assert "fake-secret-value" not in message
 
 
 def test_redaction_variants() -> None:

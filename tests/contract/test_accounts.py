@@ -144,6 +144,25 @@ async def test_invalid_account_response_is_structured(
             await AccountsService(transport).list()
 
 
+async def test_account_list_validation_diagnostic_reports_field_path(
+    settings: ETradeSettings, auth: FakeAuthenticator
+) -> None:
+    payload = {"AccountListResponse": {"accounts": {"account": {"accountIdKey": "key"}}}}
+
+    async with ApiTransport(
+        settings,
+        authenticator=auth,
+        http_transport=httpx.MockTransport(lambda r: httpx.Response(200, json=payload)),
+    ) as transport:
+        with pytest.raises(ETradeResponseError) as exc:
+            await AccountsService(transport).list()
+
+    message = str(exc.value)
+    assert "Invalid account list response" in message
+    assert "accounts.0.accountId" in message
+    assert "key" not in message
+
+
 async def test_client_exposes_accounts_service(
     settings: ETradeSettings, auth: FakeAuthenticator
 ) -> None:
