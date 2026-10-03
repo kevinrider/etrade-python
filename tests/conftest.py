@@ -1,4 +1,7 @@
+import json
 from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -45,3 +48,9 @@ def no_real_network(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", forbidden)
     yield
+
+
+def load_json_fixture(path: str) -> Any:
+    fixture_path = Path(__file__).parent / "fixtures" / path
+    with fixture_path.open(encoding="utf-8") as fixture_file:
+        return json.load(fixture_file)

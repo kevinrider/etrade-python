@@ -1,0 +1,26 @@
+{
+  "TransactionDetailsResponse": {
+    "transactionId": "18144100000861",
+    "accountId": "835649790",
+    "transactionDate": "1527134400000",
+    "amount": "-2.0",
+    "description": "ACH WITHDRAWL REFID:77521276;",
+    "Category": {
+      "categoryId": "0",
+      "parentId": "0",
+      "categoryName": "",
+      "parentName": ""
+    },
+    "Brokerage": {
+      "transactionType": "Transfer",
+      "Product": {},
+      "quantity": "0.0",
+      "price": "0.0",
+      "settlementCurrency": "USD",
+      "paymentCurrency": "USD",
+      "fee": "0.0",
+      "memo": "",
+      "orderNo": "0"
+    }
+  }
+}

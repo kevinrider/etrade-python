@@ -1,0 +1,30 @@
+{
+  "AccountListResponse": {
+    "Accounts": {
+      "Account": [
+        {
+          "accountId": "840104290",
+          "accountIdKey": "JIdOIAcSpwR1Jva7RQBraQ",
+          "accountMode": "MARGIN",
+          "accountDesc": "INDIVIDUAL",
+          "accountName": "Individual Brokerage",
+          "accountType": "INDIVIDUAL",
+          "institutionType": "BROKERAGE",
+          "accountStatus": "ACTIVE",
+          "closedDate": "0"
+        },
+        {
+          "accountId": "840104291",
+          "accountIdKey": "JIdOIAcSpwR1Jva7RQBraq",
+          "accountMode": "MARGIN",
+          "accountDesc": "INDIVIDUAL",
+          "accountName": "",
+          "accountType": "INDIVIDUAL",
+          "institutionType": "BROKERAGE",
+          "accountStatus": "ACTIVE",
+          "closedDate": "0"
+        }
+      ]
+    }
+  }
+}

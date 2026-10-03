@@ -1,0 +1,94 @@
+{
+  "PortfolioResponse": {
+    "AccountPortfolio": {
+      "accountId": "835547880",
+      "Position": [
+        {
+          "positionId": "10087531",
+          "Product": {
+            "expiryDay": "0",
+            "expiryMonth": "0",
+            "expiryYear": "0",
+            "securityType": "EQ",
+            "strikePrice": "0",
+            "symbol": "A"
+          },
+          "symbolDescription": "A",
+          "dateAcquired": "-68400000",
+          "pricePaid": "0",
+          "commissions": "0",
+          "otherFees": "0",
+          "quantity": "-120",
+          "positionIndicator": "TYPE2",
+          "positionType": "SHORT",
+          "daysGain": "190.80",
+          "daysGainPct": "2.4472",
+          "marketValue": "-7605.60",
+          "totalCost": "0",
+          "totalGain": "-7605.60",
+          "totalGainPct": "0",
+          "pctOfPortfolio": "-0.0008",
+          "costPerShare": "0",
+          "todayCommissions": "0",
+          "todayFees": "0",
+          "todayPricePaid": "0",
+          "todayQuantity": "0",
+          "adjPrevClose": "64.970000",
+          "Quick": {
+            "change": "-1.59",
+            "changePct": "-2.4472",
+            "lastTrade": "63.38",
+            "lastTradeTime": "1529429280",
+            "quoteStatus": "DELAYED",
+            "volume": "2431617"
+          },
+          "lotsDetails": "https://api.etrade.com/v1/accounts/JDIozUumZpHdgbIjMnAAHQ/portfolio/10087531",
+          "quoteDetails": "https://api.etrade.com/v1/market/quote/A"
+        },
+        {
+          "positionId": "140357348131",
+          "Product": {
+            "expiryDay": "0",
+            "expiryMonth": "0",
+            "expiryYear": "0",
+            "securityType": "EQ",
+            "strikePrice": "0",
+            "symbol": "TWTR"
+          },
+          "symbolDescription": "TWTR",
+          "dateAcquired": "-68400000",
+          "pricePaid": "0",
+          "commissions": "0",
+          "otherFees": "0",
+          "quantity": "3",
+          "positionIndicator": "TYPE2",
+          "positionType": "LONG",
+          "daysGain": "-3.915",
+          "daysGainPct": "-2.8369",
+          "marketValue": "134.085",
+          "totalCost": "0",
+          "totalGain": "134.085",
+          "totalGainPct": "0",
+          "pctOfPortfolio": "0.0235",
+          "costPerShare": "0",
+          "todayCommissions": "0",
+          "todayFees": "0",
+          "todayPricePaid": "0",
+          "todayQuantity": "0",
+          "adjPrevClose": "46.000000",
+          "Quick": {
+            "change": "-1.305",
+            "changePct": "-2.8369",
+            "lastTrade": "44.695",
+            "lastTradeTime": "1529429280",
+            "quoteStatus": "DELAYED",
+            "volume": "26582141"
+          },
+          "lotsDetails": "https://api.etrade.com/v1/accounts/yIFaUoJ81qyAhgxLWRQ42g/portfolio/140357348131",
+          "quoteDetails": "https://api.etrade.com/v1/market/quote/TWTR"
+        }
+      ],
+      "totalPages": "1"
+    }
+  }
+}

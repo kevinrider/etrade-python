@@ -4,7 +4,6 @@ import httpx
 import pytest
 
 from etrade_python import (
-    Account,
     AccountBalanceRequest,
     AccountListResponse,
     ETradeClient,
@@ -14,7 +13,7 @@ from etrade_python import (
 )
 from etrade_python.accounts import AccountsService
 from etrade_python.transport import ApiTransport
-from tests.conftest import FakeAuthenticator
+from tests.conftest import FakeAuthenticator, load_json_fixture
 
 
 async def test_accounts_list_contract(settings: ETradeSettings, auth: FakeAuthenticator) -> None:
@@ -25,29 +24,7 @@ async def test_accounts_list_contract(settings: ETradeSettings, auth: FakeAuthen
         assert request.method == "GET"
         assert request.url.path == "/v1/accounts/list.json"
         assert request.headers["Authorization"].startswith("OAuth ")
-        return httpx.Response(
-            200,
-            json={
-                "AccountListResponse": {
-                    "accounts": {
-                        "account": [
-                            {
-                                "accountId": "840104290",
-                                "accountIdKey": "JIdOIAcSpwR1Jva7RQBraQ",
-                                "accountMode": "MARGIN",
-                                "accountDesc": "INDIVIDUAL",
-                                "accountName": "Individual Brokerage",
-                                "accountType": "INDIVIDUAL",
-                                "institutionType": "BROKERAGE",
-                                "accountStatus": "ACTIVE",
-                                "closedDate": 0,
-                                "newBrokerField": "kept",
-                            }
-                        ]
-                    }
-                }
-            },
-        )
+        return httpx.Response(200, json=load_json_fixture("responses/account_list_response.json"))
 
     async with ApiTransport(
         settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
@@ -56,24 +33,15 @@ async def test_accounts_list_contract(settings: ETradeSettings, auth: FakeAuthen
 
     assert len(seen) == 1
     assert auth.calls == 1
-    assert response == AccountListResponse(
-        accounts=[
-            Account.model_validate(
-                {
-                    "accountId": "840104290",
-                    "accountIdKey": "JIdOIAcSpwR1Jva7RQBraQ",
-                    "accountMode": "MARGIN",
-                    "accountDesc": "INDIVIDUAL",
-                    "accountName": "Individual Brokerage",
-                    "accountType": "INDIVIDUAL",
-                    "institutionType": "BROKERAGE",
-                    "accountStatus": "ACTIVE",
-                    "closedDate": 0,
-                    "newBrokerField": "kept",
-                }
-            )
-        ]
-    )
+    assert isinstance(response, AccountListResponse)
+    assert len(response.accounts) == 2
+    first, second = response.accounts
+    assert first.account_id == "840104290"
+    assert first.account_id_key == "JIdOIAcSpwR1Jva7RQBraQ"
+    assert first.account_name == "Individual Brokerage"
+    assert first.closed_date is None
+    assert second.account_id == "840104291"
+    assert second.account_name == ""
 
 
 async def test_accounts_list_204_is_empty(
@@ -134,30 +102,7 @@ async def test_get_balance_contract(settings: ETradeSettings, auth: FakeAuthenti
             {"instType": "BROKERAGE", "accountType": "CASH", "realTimeNAV": "true"}
         )
         return httpx.Response(
-            200,
-            json={
-                "BalanceResponse": {
-                    "accountId": "835649790",
-                    "accountType": "PDT_ACCOUNT",
-                    "optionLevel": "LEVEL_4",
-                    "accountDescription": "Individual Brokerage",
-                    "quoteMode": 6,
-                    "Cash": {
-                        "fundsForOpenOrdersCash": 0,
-                        "moneyMktBalance": 0,
-                    },
-                    "Computed": {
-                        "cashAvailableForInvestment": "0",
-                        "netCash": "93921.44",
-                        "cashBalance": "93921.44",
-                        "cashBuyingPower": "93921.44",
-                    },
-                    "Margin": {
-                        "dtCashOpenOrderReserve": 0,
-                        "dtMarginOpenOrderReserve": 0,
-                    },
-                }
-            },
+            200, json=load_json_fixture("responses/account_balance_response.json")
         )
 
     async with ApiTransport(
@@ -169,6 +114,8 @@ async def test_get_balance_contract(settings: ETradeSettings, auth: FakeAuthenti
         )
 
     assert balance.account_id == "835649790"
+    assert balance.account_description == "KRITHH TT"
+    assert balance.quote_mode == 6
     assert balance.cash is not None
     assert balance.cash.money_market_balance == Decimal("0")
     assert balance.computed_balance is not None

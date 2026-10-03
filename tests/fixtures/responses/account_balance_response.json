@@ -1,0 +1,36 @@
+{
+  "BalanceResponse": {
+    "accountId": "835649790",
+    "accountType": "PDT_ACCOUNT",
+    "optionLevel": "LEVEL_4",
+    "accountDescription": "KRITHH TT",
+    "quoteMode": "6",
+    "dayTraderStatus": "PDT_MIN_EQUITY_RES_1XK",
+    "accountMode": "PDT ACCOUNT",
+    "Cash": {
+      "fundsForOpenOrdersCash": "0",
+      "moneyMktBalance": "0"
+    },
+    "Computed": {
+      "cashAvailableForInvestment": "0",
+      "netCash": "93921.44",
+      "cashBalance": "93921.44",
+      "settledCashForInvestment": "0",
+      "unSettledCashForInvestment": "0",
+      "fundsWithheldFromPurchasePower": "0",
+      "fundsWithheldFromWithdrawal": "0",
+      "marginBuyingPower": "0",
+      "cashBuyingPower": "93921.44",
+      "dtMarginBuyingPower": "0",
+      "dtCashBuyingPower": "0",
+      "shortAdjustBalance": "0",
+      "regtEquity": "0",
+      "regtEquityPercent": "0",
+      "accountBalance": "0"
+    },
+    "Margin": {
+      "dtCashOpenOrderReserve": "0",
+      "dtMarginOpenOrderReserve": "0"
+    }
+  }
+}

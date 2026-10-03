@@ -15,7 +15,7 @@ from etrade_python import (
 from etrade_python.portfolio import PortfolioService
 from etrade_python.transactions import TransactionDetailsRequest, TransactionsService
 from etrade_python.transport import ApiTransport
-from tests.conftest import FakeAuthenticator
+from tests.conftest import FakeAuthenticator, load_json_fixture
 
 
 async def test_portfolio_positions_contract(
@@ -27,25 +27,7 @@ async def test_portfolio_positions_contract(
         assert request.url.params == httpx.QueryParams(
             {"count": "10", "totalsRequired": "true", "lotsRequired": "true", "view": "QUICK"}
         )
-        return httpx.Response(
-            200,
-            json={
-                "PortfolioResponse": {
-                    "Totals": {"totalMarketValue": "1000.00"},
-                    "AccountPortfolio": {
-                        "accountId": "123456",
-                        "Position": {
-                            "positionId": 100,
-                            "Product": {"symbol": "AAPL", "securityType": "EQ"},
-                            "quantity": "3",
-                            "marketValue": "525.75",
-                            "Quick": {"lastTrade": "175.25"},
-                            "PositionLot": {"positionLotId": 10, "remainingQty": "3"},
-                        },
-                    },
-                }
-            },
-        )
+        return httpx.Response(200, json=load_json_fixture("responses/portfolio_response.json"))
 
     async with ApiTransport(
         settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
@@ -55,12 +37,17 @@ async def test_portfolio_positions_contract(
             PortfolioRequest(count=10, totals_required=True, lots_required=True, view="QUICK"),
         )
 
-    assert response.totals is not None
-    assert response.totals.total_market_value == Decimal("1000.00")
+    assert response.account_portfolios[0].account_id == "835547880"
+    assert response.totals is None
+    assert len(response.account_portfolios[0].positions) == 2
     position = response.account_portfolios[0].positions[0]
     assert position.product is not None
-    assert position.product.symbol == "AAPL"
-    assert position.position_lots[0].remaining_qty == Decimal("3")
+    assert position.product.symbol == "A"
+    assert position.quantity == Decimal("-120")
+    assert position.market_value == Decimal("-7605.60")
+    assert position.quick is not None
+    assert position.quick.last_trade == Decimal("63.38")
+    assert position.quick.last_trade_time == datetime(2018, 6, 19, 17, 28, tzinfo=UTC)
 
 
 async def test_portfolio_rejects_blank_account_id(
@@ -80,27 +67,7 @@ async def test_transactions_list_contract(
         assert request.url.params == httpx.QueryParams(
             {"marker": "50", "count": "10", "startDate": "01012026", "endDate": "01312026"}
         )
-        return httpx.Response(
-            200,
-            json={
-                "TransactionListResponse": {
-                    "Transaction": {
-                        "transactionId": "99",
-                        "accountId": "123456",
-                        "transactionDate": 1767225600000,
-                        "amount": "-12.34",
-                        "description": "BUY MSFT",
-                        "Brokerage": {
-                            "Product": {"symbol": "MSFT", "securityType": "EQ"},
-                            "quantity": "1",
-                            "price": "100.50",
-                        },
-                    },
-                    "pageMarkers": "49",
-                    "transactionCount": "1",
-                }
-            },
-        )
+        return httpx.Response(200, json=load_json_fixture("responses/transactions_response.json"))
 
     async with ApiTransport(
         settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
@@ -110,13 +77,15 @@ async def test_transactions_list_contract(
             TransactionsRequest(marker="50", count=10, start_date="01012026", end_date="01312026"),
         )
 
+    assert len(response.transactions) == 3
+    assert response.transaction_count == "3"
+    assert response.total_count == "5"
     transaction = response.transactions[0]
-    assert transaction.transaction_id == "99"
-    assert transaction.transaction_date == datetime(2026, 1, 1, tzinfo=UTC)
-    assert transaction.amount == Decimal("-12.34")
+    assert transaction.transaction_id == "18165100001766"
+    assert transaction.transaction_date == datetime(2018, 6, 14, 4, tzinfo=UTC)
+    assert transaction.amount == Decimal("-2")
     assert transaction.brokerage is not None
-    assert transaction.brokerage.product is not None
-    assert transaction.brokerage.product.symbol == "MSFT"
+    assert transaction.brokerage.product is None
 
 
 async def test_transaction_details_contract(
@@ -127,16 +96,7 @@ async def test_transaction_details_contract(
         assert request.url.path == "/v1/accounts/fake-key/transactions/99.json"
         assert request.url.params == httpx.QueryParams({"storeId": "bank"})
         return httpx.Response(
-            200,
-            json={
-                "TransactionDetailsResponse": {
-                    "transactionId": "99",
-                    "accountId": "123456",
-                    "amount": "1.23",
-                    "description": "ACH DEPOSIT",
-                    "Category": {"categoryName": "Deposit"},
-                }
-            },
+            200, json=load_json_fixture("responses/transaction_details_response.json")
         )
 
     async with ApiTransport(
@@ -146,9 +106,12 @@ async def test_transaction_details_contract(
             "fake-key", "99", TransactionDetailsRequest(store_id="bank")
         )
 
-    assert response.transaction.transaction_id == "99"
+    assert response.transaction.transaction_id == "18144100000861"
+    assert response.transaction.transaction_date == datetime(2018, 5, 24, 4, tzinfo=UTC)
     assert response.transaction.category is not None
-    assert response.transaction.category.category_name == "Deposit"
+    assert response.transaction.category.category_name == ""
+    assert response.transaction.brokerage is not None
+    assert response.transaction.brokerage.product is None
 
 
 async def test_transactions_reject_blank_ids(
