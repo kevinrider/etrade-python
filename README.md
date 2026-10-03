@@ -40,9 +40,10 @@ Implemented:
 - OAuth 1.0a signing and protocol operations
 - session lifecycle handling for inactivity renewal and daily expiration
 - memory and keyring credential stores
-- diagnostic auth and accounts CLI
+- diagnostic auth, accounts, portfolio, and transactions CLI
 - endpoint coverage tracking
 - typed Accounts service for account list and balance endpoints
+- typed Portfolio and Transactions services for positions and transaction history
 - local architecture and research notes
 - offline tests for configuration, transport, OAuth, sessions, credential stores, CLI,
   accounts, retries, responses, logging, and client lifecycle
@@ -50,8 +51,6 @@ Implemented:
 
 Planned:
 
-- portfolio endpoints
-- transactions endpoints
 - market data endpoints
 - order preview, placement, modification, and cancellation endpoints
 - alerts endpoints
@@ -76,10 +75,10 @@ suffixes are format selectors and do not create separate endpoints.
 | Done | OAuth | [GET /oauth/revoke_access_token](https://apisb.etrade.com/docs/api/authorization/revoke_access_token.html) | `OAuthClient.revoke_access_token` | ETradeCredentials | RevocationResult | Yes | Yes | 2 |
 | Done | Accounts | [GET /accounts/list](https://apisb.etrade.com/docs/api/account/api-account-v1.html) | `accounts.list` | - | AccountListResponse | Yes | Yes | 3 |
 | Done | Accounts | [GET /accounts/{accountIdKey}/balance](https://apisb.etrade.com/docs/api/account/api-balance-v1.html) | `accounts.get_balance` | AccountBalanceRequest | AccountBalanceResponse | Yes | Yes | 3 |
-| Planned | Portfolio | [GET /accounts/{accountIdKey}/portfolio](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_positions` | PositionsRequest | PositionsPage | No | No | 4 |
-| Planned | Portfolio | [GET /accounts/{accountIdKey}/portfolio/{positionId}](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_position_lots` | PositionLotsRequest | PositionLots | No | No | 4 |
-| Planned | Transactions | [GET /accounts/{accountIdKey}/transactions](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.list` | TransactionsRequest | TransactionsPage | No | No | 4 |
-| Planned | Transactions | [GET /accounts/{accountIdKey}/transactions/{tranid}](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.get` | TransactionDetailsRequest | Transaction | No | No | 4 |
+| Done | Portfolio | [GET /accounts/{accountIdKey}/portfolio](https://apisb.etrade.com/docs/api/account/api-portfolio-v1.html) | `portfolio.get_positions` | PortfolioRequest | PortfolioResponse | Yes | No | 4 |
+| Covered | Portfolio | Position lots via `GET /accounts/{accountIdKey}/portfolio` with `lotsRequired=true` | `portfolio.get_positions` | PortfolioRequest | list[PositionLot] inside PortfolioResponse | Yes | No | 4 |
+| Done | Transactions | [GET /accounts/{accountIdKey}/transactions](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.list` | TransactionsRequest | TransactionsResponse | Yes | No | 4 |
+| Done | Transactions | [GET /accounts/{accountIdKey}/transactions/{tranid}](https://apisb.etrade.com/docs/api/account/api-transaction-v1.html) | `transactions.get` | TransactionDetailsRequest | TransactionDetailsResponse | Yes | No | 4 |
 | Planned | Market | [GET /market/quote/{symbols}](https://apisb.etrade.com/docs/api/market/api-quote-v1.html) | `market.get_quote / get_quotes` | QuotesRequest | Quote / QuotesResponse | No | No | 5 |
 | Planned | Market | [GET /market/lookup/{search}](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.lookup_product` | ProductLookupRequest | ProductsResponse | No | No | 5 |
 | Planned | Market | [GET /market/optionexpiredate](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_expirations` | OptionExpirationsRequest | OptionExpirationsResponse | No | No | 5 |
@@ -120,6 +119,12 @@ Milestone 3 Accounts endpoints:
 .venv/bin/etrade accounts balance ACCOUNT_ID_KEY
 .venv/bin/etrade accounts balance ACCOUNT_ID_KEY --account-type CASH --real-time-nav
 .venv/bin/etrade accounts balance ACCOUNT_ID_KEY --json
+.venv/bin/etrade portfolio positions ACCOUNT_ID_KEY
+.venv/bin/etrade portfolio positions ACCOUNT_ID_KEY --json
+.venv/bin/etrade transactions list ACCOUNT_ID_KEY
+.venv/bin/etrade transactions list ACCOUNT_ID_KEY --json
+.venv/bin/etrade transactions get ACCOUNT_ID_KEY TRANSACTION_ID
+.venv/bin/etrade transactions get ACCOUNT_ID_KEY TRANSACTION_ID --json
 ```
 
 The account commands display account IDs and account ID keys because they are

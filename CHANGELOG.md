@@ -10,6 +10,7 @@
 - Add typed Accounts service support for account listing and account balances.
 - Add diagnostic Accounts CLI commands for manual read-only API testing.
 - Manually verify Accounts list and balance against production.
+- Add typed Portfolio and Transactions services with diagnostic CLI commands.
 - Track official endpoint coverage and reference research without overstating endpoint support.
 - Add offline tests, strict type checks, lint, coverage, and build CI.
-- Portfolio, transactions, market, orders, and alerts services remain planned.
+- Market, orders, and alerts services remain planned.

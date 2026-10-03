@@ -12,6 +12,12 @@ from etrade_python import (
     AccountBalanceRequest,
     AccountBalanceResponse,
     AccountListResponse,
+    PortfolioRequest,
+    PortfolioResponse,
+    TransactionDetailsRequest,
+    TransactionDetailsResponse,
+    TransactionsRequest,
+    TransactionsResponse,
     __version__,
 )
 from etrade_python.auth import TokenStatus
@@ -22,8 +28,12 @@ from etrade_python.exceptions import ETradeError
 app = typer.Typer(no_args_is_help=True, invoke_without_command=True)
 auth_app = typer.Typer(no_args_is_help=True)
 accounts_app = typer.Typer(no_args_is_help=True)
+portfolio_app = typer.Typer(no_args_is_help=True)
+transactions_app = typer.Typer(no_args_is_help=True)
 app.add_typer(auth_app, name="auth")
 app.add_typer(accounts_app, name="accounts")
+app.add_typer(portfolio_app, name="portfolio")
+app.add_typer(transactions_app, name="transactions")
 
 
 def _run(coro: Coroutine[Any, Any, object]) -> object:
@@ -149,6 +159,90 @@ def account_balance(
     _handle(command())
 
 
+@portfolio_app.command("positions")
+def portfolio_positions(
+    account_id_key: str = typer.Argument(..., help="E*TRADE accountIdKey from accounts list."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    count: int | None = typer.Option(None, "--count"),
+    page_number: int | None = typer.Option(None, "--page-number"),
+    view: str | None = typer.Option(None, "--view"),
+    lots_required: bool | None = typer.Option(None, "--lots-required/--no-lots-required"),
+    totals_required: bool | None = typer.Option(None, "--totals-required/--no-totals-required"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Show portfolio positions for an accountIdKey."""
+
+    async def command() -> None:
+        request = PortfolioRequest(
+            count=count,
+            page_number=page_number,
+            view=view,
+            lots_required=lots_required,
+            totals_required=totals_required,
+        )
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.portfolio.get_positions(account_id_key, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_portfolio(response)
+
+    _handle(command())
+
+
+@transactions_app.command("list")
+def list_transactions(
+    account_id_key: str = typer.Argument(..., help="E*TRADE accountIdKey from accounts list."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    marker: str | None = typer.Option(None, "--marker"),
+    count: int | None = typer.Option(None, "--count"),
+    start_date: str | None = typer.Option(None, "--start-date"),
+    end_date: str | None = typer.Option(None, "--end-date"),
+    sort_order: str | None = typer.Option(None, "--sort-order"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """List transactions for an accountIdKey."""
+
+    async def command() -> None:
+        request = TransactionsRequest(
+            marker=marker,
+            count=count,
+            start_date=start_date,
+            end_date=end_date,
+            sort_order=sort_order,
+        )
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.transactions.list(account_id_key, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_transactions(response)
+
+    _handle(command())
+
+
+@transactions_app.command("get")
+def get_transaction(
+    account_id_key: str = typer.Argument(..., help="E*TRADE accountIdKey from accounts list."),
+    transaction_id: str = typer.Argument(..., help="Transaction ID from transactions list."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    store_id: str | None = typer.Option(None, "--store-id"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Show transaction details for a transaction ID."""
+
+    async def command() -> None:
+        request = TransactionDetailsRequest(store_id=store_id)
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.transactions.get(account_id_key, transaction_id, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_transaction_details(response)
+
+    _handle(command())
+
+
 def _echo_json(model: BaseModel) -> None:
     typer.echo(model.model_dump_json(by_alias=True, exclude_none=True, indent=2))
 
@@ -187,6 +281,55 @@ def _echo_account_balance(response: AccountBalanceResponse) -> None:
             "Day-trade margin open order reserve",
             response.margin.dt_margin_open_order_reserve,
         )
+
+
+def _echo_portfolio(response: PortfolioResponse) -> None:
+    if response.totals is not None:
+        _echo_optional_decimal("Total market value", response.totals.total_market_value)
+        _echo_optional_decimal("Total gain/loss", response.totals.total_gain_loss)
+    positions = [
+        position
+        for account_portfolio in response.account_portfolios
+        for position in account_portfolio.positions
+    ]
+    if not positions:
+        typer.echo("No positions found.")
+        return
+    for position in positions:
+        symbol = position.product.symbol if position.product is not None else None
+        typer.echo(symbol or position.symbol_description or "Position")
+        _echo_optional("  Position ID", position.position_id)
+        _echo_optional("  Type", position.position_type)
+        _echo_optional_decimal("  Quantity", position.quantity)
+        _echo_optional_decimal("  Market value", position.market_value)
+        _echo_optional_decimal("  Total gain", position.total_gain)
+
+
+def _echo_transactions(response: TransactionsResponse) -> None:
+    if not response.transactions:
+        typer.echo("No transactions found.")
+        return
+    for transaction in response.transactions:
+        typer.echo(transaction.description or transaction.transaction_id or "Transaction")
+        _echo_optional("  Transaction ID", transaction.transaction_id)
+        _echo_optional("  Date", transaction.transaction_date)
+        _echo_optional_decimal("  Amount", transaction.amount)
+        _echo_optional("  Type", transaction.transaction_type)
+
+
+def _echo_transaction_details(response: TransactionDetailsResponse) -> None:
+    transaction = response.transaction
+    typer.echo(transaction.description or transaction.transaction_id or "Transaction")
+    _echo_optional("Transaction ID", transaction.transaction_id)
+    _echo_optional("Account ID", transaction.account_id)
+    _echo_optional("Date", transaction.transaction_date)
+    _echo_optional_decimal("Amount", transaction.amount)
+    if transaction.brokerage is not None:
+        _echo_optional("Brokerage type", transaction.brokerage.transaction_type)
+        if transaction.brokerage.product is not None:
+            _echo_optional("Symbol", transaction.brokerage.product.symbol)
+        _echo_optional_decimal("Quantity", transaction.brokerage.quantity)
+        _echo_optional_decimal("Price", transaction.brokerage.price)
 
 
 def _echo_optional(label: str, value: object | None) -> None:

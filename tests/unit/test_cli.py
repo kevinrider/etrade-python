@@ -10,6 +10,12 @@ from etrade_python import (
     AccountBalanceResponse,
     AccountListResponse,
     ETradeValidationError,
+    PortfolioRequest,
+    PortfolioResponse,
+    TransactionDetailsRequest,
+    TransactionDetailsResponse,
+    TransactionsRequest,
+    TransactionsResponse,
 )
 from etrade_python.auth import AuthorizationUrl, RequestToken, TokenStatus
 from etrade_python.cli.app import app
@@ -96,6 +102,77 @@ class FakeAccounts:
         )
 
 
+class FakePortfolio:
+    def __init__(self, client: "FakeClient") -> None:
+        self._client = client
+
+    async def get_positions(
+        self, account_id_key: str, request: PortfolioRequest | None = None
+    ) -> PortfolioResponse:
+        self._client.portfolio_account_id_key = account_id_key
+        self._client.portfolio_request = request
+        return PortfolioResponse.model_validate(
+            {
+                "Totals": {"totalMarketValue": Decimal("1000.00")},
+                "AccountPortfolio": {
+                    "accountId": "123456",
+                    "Position": {
+                        "positionId": 100,
+                        "Product": {"symbol": "AAPL", "securityType": "EQ"},
+                        "quantity": Decimal("2"),
+                        "marketValue": Decimal("350.50"),
+                    },
+                },
+            }
+        )
+
+
+class FakeTransactions:
+    def __init__(self, client: "FakeClient") -> None:
+        self._client = client
+
+    async def list(
+        self, account_id_key: str, request: TransactionsRequest | None = None
+    ) -> TransactionsResponse:
+        self._client.transactions_account_id_key = account_id_key
+        self._client.transactions_request = request
+        return TransactionsResponse.model_validate(
+            {
+                "Transaction": {
+                    "transactionId": "99",
+                    "transactionDate": 1767225600000,
+                    "amount": Decimal("-12.34"),
+                    "description": "BUY MSFT",
+                    "transactionType": "Bought",
+                },
+                "pageMarkers": "88",
+            }
+        )
+
+    async def get(
+        self,
+        account_id_key: str,
+        transaction_id: str,
+        request: TransactionDetailsRequest | None = None,
+    ) -> TransactionDetailsResponse:
+        self._client.transaction_detail_account_id_key = account_id_key
+        self._client.transaction_id = transaction_id
+        self._client.transaction_details_request = request
+        return TransactionDetailsResponse.model_validate(
+            {
+                "transactionId": "99",
+                "accountId": "123456",
+                "amount": Decimal("-12.34"),
+                "description": "BUY MSFT",
+                "Brokerage": {
+                    "Product": {"symbol": "MSFT", "securityType": "EQ"},
+                    "quantity": Decimal("1"),
+                    "price": Decimal("100.50"),
+                },
+            }
+        )
+
+
 class FakeClient:
     instances: list["FakeClient"] = []
 
@@ -103,9 +180,18 @@ class FakeClient:
         self.oauth = FakeOAuth()
         self.session = FakeSession()
         self.accounts = FakeAccounts(self)
+        self.portfolio = FakePortfolio(self)
+        self.transactions = FakeTransactions(self)
         self.profile = profile
         self.balance_account_id_key: str | None = None
         self.balance_request: AccountBalanceRequest | None = None
+        self.portfolio_account_id_key: str | None = None
+        self.portfolio_request: PortfolioRequest | None = None
+        self.transactions_account_id_key: str | None = None
+        self.transactions_request: TransactionsRequest | None = None
+        self.transaction_detail_account_id_key: str | None = None
+        self.transaction_id: str | None = None
+        self.transaction_details_request: TransactionDetailsRequest | None = None
         self.__class__.instances.append(self)
 
     async def __aenter__(self) -> "FakeClient":
@@ -225,3 +311,114 @@ def test_accounts_errors_exit_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 1
     assert "fake account failure" in result.output
     assert "fake-key" not in result.output
+
+
+def test_portfolio_positions_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        [
+            "portfolio",
+            "positions",
+            "fake-account-key",
+            "--count",
+            "10",
+            "--view",
+            "QUICK",
+            "--lots-required",
+            "--totals-required",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Total market value: 1000.00" in result.output
+    assert "AAPL" in result.output
+    assert "Market value: 350.50" in result.output
+    client = FakeClient.instances[0]
+    assert client.portfolio_account_id_key == "fake-account-key"
+    assert client.portfolio_request == PortfolioRequest(
+        count=10, view="QUICK", lots_required=True, totals_required=True
+    )
+
+
+def test_portfolio_positions_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["portfolio", "positions", "fake-account-key", "--json"])
+
+    assert result.exit_code == 0
+    assert '"accountPortfolio": [' in result.output
+    assert '"symbol": "AAPL"' in result.output
+
+
+def test_transactions_list_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        [
+            "transactions",
+            "list",
+            "fake-account-key",
+            "--count",
+            "10",
+            "--start-date",
+            "01012026",
+            "--end-date",
+            "01312026",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "BUY MSFT" in result.output
+    assert "Transaction ID: 99" in result.output
+    assert "Amount: -12.34" in result.output
+    client = FakeClient.instances[0]
+    assert client.transactions_account_id_key == "fake-account-key"
+    assert client.transactions_request == TransactionsRequest(
+        count=10, start_date="01012026", end_date="01312026"
+    )
+
+
+def test_transactions_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["transactions", "list", "fake-account-key", "--json"])
+
+    assert result.exit_code == 0
+    assert '"transaction": [' in result.output
+    assert '"transactionId": "99"' in result.output
+
+
+def test_transaction_get_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["transactions", "get", "fake-account-key", "99", "--store-id", "bank"],
+    )
+
+    assert result.exit_code == 0
+    assert "BUY MSFT" in result.output
+    assert "Symbol: MSFT" in result.output
+    client = FakeClient.instances[0]
+    assert client.transaction_detail_account_id_key == "fake-account-key"
+    assert client.transaction_id == "99"
+    assert client.transaction_details_request == TransactionDetailsRequest(store_id="bank")
+
+
+def test_transaction_get_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["transactions", "get", "fake-account-key", "99", "--json"])
+
+    assert result.exit_code == 0
+    assert '"transactionId": "99"' in result.output
+    assert '"symbol": "MSFT"' in result.output
