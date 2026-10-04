@@ -84,11 +84,11 @@ suffixes are format selectors and do not create separate endpoints.
 | Done | Market | [GET /market/optionexpiredate](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_expirations` | OptionExpirationsRequest | OptionExpirationsResponse | Yes | Yes | 5 |
 | Done | Market | [GET /market/optionchains](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_chain` | OptionChainRequest | OptionChainResponse | Yes | Yes | 5 |
 | Done | Orders | [GET /accounts/{accountIdKey}/orders](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.list / list_all` | OrdersRequest | OrdersResponse | Yes | Yes | 6 |
-| Done | Orders | [POST /accounts/{accountIdKey}/orders/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview` | PreviewOrderRequest | PreviewOrderResponse | Yes | No | 6 |
-| Done | Orders | [POST /accounts/{accountIdKey}/orders/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place` | PlaceOrderRequest | PlaceOrderResponse | Yes | No | 6 |
-| Done | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview_change` | PreviewOrderRequest | PreviewOrderResponse | Yes | No | 6 |
-| Done | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place_change` | PlaceOrderRequest | PlaceOrderResponse | Yes | No | 6 |
-| Done | Orders | [PUT /accounts/{accountIdKey}/orders/cancel](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.cancel` | CancelOrderRequest | CancelOrderResponse | Yes | No | 6 |
+| Done | Orders | [POST /accounts/{accountIdKey}/orders/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview` | PreviewOrderRequest | PreviewOrderResponse | Yes | Yes | 6 |
+| Done | Orders | [POST /accounts/{accountIdKey}/orders/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place` | PlaceOrderRequest | PlaceOrderResponse | Yes | Yes | 6 |
+| Done | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview_change` | PreviewOrderRequest | PreviewOrderResponse | Yes | Yes | 6 |
+| Done | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place_change` | PlaceOrderRequest | PlaceOrderResponse | Yes | Yes | 6 |
+| Done | Orders | [PUT /accounts/{accountIdKey}/orders/cancel](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.cancel` | CancelOrderRequest | CancelOrderResponse | Yes | Yes | 6 |
 | Planned | Alerts | [GET /user/alerts](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.list` | AlertsRequest | AlertsResponse | No | No | 7 |
 | Planned | Alerts | [GET /user/alerts/{id}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.get` | AlertDetailsRequest | Alert | No | No | 7 |
 | Planned | Alerts | [DELETE /user/alerts/{alert_id_list}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.delete` | DeleteAlertsRequest | DeleteAlertsResponse | No | No | 7 |
