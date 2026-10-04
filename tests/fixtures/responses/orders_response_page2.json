@@ -1,0 +1,39 @@
+{
+  "OrdersResponse": {
+    "Order": {
+      "orderId": "94",
+      "details": "https://api.etrade.com/v1/accounts/ZrnXF-hPu853sBzwHfWGBQ/orders/94",
+      "orderType": "EQ",
+      "OrderDetail": {
+        "orderNumber": "789",
+        "accountId": "00012345",
+        "placedTime": "1620007200",
+        "orderValue": "250.0",
+        "status": "EXECUTED",
+        "orderTerm": "GOOD_FOR_DAY",
+        "priceType": "MARKET",
+        "instrument": {
+          "Instrument": {
+            "Product": {
+              "symbol": "ZZZ",
+              "securityType": "EQ"
+            },
+            "symbolDescription": "ZZZ Corp",
+            "orderAction": "BUY",
+            "quantityType": "QUANTITY",
+            "quantity": "10",
+            "filledQuantity": "10",
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    "messages": {
+      "message": {
+        "description": "Success",
+        "code": "0",
+        "type": "INFO"
+      }
+    }
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "OrdersResponse": {
+    "Order": [
+      {
+        "orderId": "96",
+        "details": "https://api.etrade.com/v1/accounts/ZrnXF-hPu853sBzwHfWGBQ/orders/96",
+        "orderType": "EQ",
+        "totalOrderValue": "1000.0",
+        "totalCommission": "1.5",
+        "OrderDetail": {
+          "orderNumber": "123",
+          "accountId": "00012345",
+          "placedTime": "1620000000",
+          "orderValue": "1000.0",
+          "status": "EXECUTED",
+          "orderTerm": "GOOD_FOR_DAY",
+          "priceType": "LIMIT",
+          "limitPrice": "10.0",
+          "instrument": {
+            "Instrument": {
+              "Product": {
+                "symbol": "ABC",
+                "securityType": "EQ"
+              },
+              "symbolDescription": "ABC Corp",
+              "orderAction": "BUY",
+              "quantityType": "QUANTITY",
+              "quantity": "100",
+              "filledQuantity": "100",
+              "averageExecutionPrice": "10.0",
+              "estimatedCommission": "1.5",
+              "estimatedFees": "0.0",
+              "bid": "10.1",
+              "ask": "10.2",
+              "lastprice": "10.0",
+              "currency": "USD"
+            }
+          }
+        },
+        "events": {
+          "event": {
+            "name": "ORDER_PLACED",
+            "dateTime": "1620000000",
+            "orderNumber": "123",
+            "instrument": {
+              "Instrument": {
+                "Product": {
+                  "symbol": "ABC",
+                  "securityType": "EQ"
+                },
+                "symbolDescription": "ABC Corp",
+                "orderAction": "BUY",
+                "quantity": "100"
+              }
+            }
+          }
+        }
+      },
+      {
+        "orderId": "95",
+        "details": "https://api.etrade.com/v1/accounts/ZrnXF-hPu853sBzwHfWGBQ/orders/95",
+        "orderType": "EQ",
+        "OrderDetail": {
+          "orderNumber": "456",
+          "accountId": "00012345",
+          "placedTime": "1620003600",
+          "orderValue": "500.0",
+          "status": "OPEN",
+          "orderTerm": "GOOD_FOR_DAY",
+          "priceType": "MARKET",
+          "instrument": {
+            "Instrument": {
+              "Product": {
+                "symbol": "XYZ",
+                "securityType": "EQ"
+              },
+              "symbolDescription": "XYZ Corp",
+              "orderAction": "SELL",
+              "quantityType": "QUANTITY",
+              "quantity": "50",
+              "filledQuantity": "0",
+              "estimatedCommission": "0.0",
+              "estimatedFees": "0.0",
+              "currency": "USD",
+              "lots": {
+                "Lot": [
+                  {
+                    "id": "1",
+                    "size": "25"
+                  },
+                  {
+                    "id": "2",
+                    "size": "25"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    ],
+    "marker": "abc",
+    "next": "def",
+    "messages": {
+      "message": {
+        "description": "Success",
+        "code": "0",
+        "type": "INFO"
+      }
+    }
+  }
+}
