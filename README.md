@@ -144,6 +144,32 @@ needed for manual API testing. Order mutation commands require
 production. CLI commands do not print OAuth tokens, token secrets, consumer
 secrets, signatures, or verifier codes.
 
+## Order Builder
+
+The low-level order request models remain available, but common order requests
+can be composed with `OrderBuilder`:
+
+```python
+from decimal import Decimal
+
+from etrade_python import OrderBuilder
+
+builder = (
+    OrderBuilder.for_account(account_id_key)
+    .client_order_id("manual-test-001")
+    .equity_limit("AAPL", action="BUY", quantity=1, limit_price=Decimal("1.00"))
+)
+
+preview_request = builder.build_preview_request()
+place_request = builder.build_place_request(preview_ids=[123456789])
+```
+
+The builder supports equity, single-option, vertical spread, three-leg, iron
+condor, and buy-write request construction. It produces the same typed
+`PreviewOrderRequest` and `PlaceOrderRequest` models accepted by
+`client.orders.preview(...)`, `client.orders.place(...)`, and the change-order
+methods.
+
 ## Development Setup
 
 This repository uses `uv` for Python environment management and a `Makefile` for

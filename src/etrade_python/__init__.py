@@ -67,6 +67,7 @@ from etrade_python.orders import (
     Messages,
     MFQuantity,
     Order,
+    OrderBuilder,
     OrderBuyPowerEffect,
     OrderDetail,
     OrderDetailRequest,
@@ -104,6 +105,7 @@ from etrade_python.transactions import (
 
 __version__ = "0.1.0.dev0"
 __all__ = [
+    "OrderBuilder",
     "PreviewOrderResponse",
     "PreviewOrderRequest",
     "PreviewId",

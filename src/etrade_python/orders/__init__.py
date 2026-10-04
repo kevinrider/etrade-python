@@ -1,5 +1,6 @@
 """Order service and models."""
 
+from etrade_python.orders.builders import OrderBuilder
 from etrade_python.orders.models import (
     CancelOrderRequest,
     CancelOrderResponse,
@@ -30,6 +31,7 @@ from etrade_python.orders.models import (
 from etrade_python.orders.service import OrdersService
 
 __all__ = [
+    "OrderBuilder",
     "CancelOrderRequest",
     "CancelOrderResponse",
     "Disclosure",
