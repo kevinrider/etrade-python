@@ -89,9 +89,9 @@ suffixes are format selectors and do not create separate endpoints.
 | Done | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview_change` | PreviewOrderRequest | PreviewOrderResponse | Yes | Yes | 6 |
 | Done | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place_change` | PlaceOrderRequest | PlaceOrderResponse | Yes | Yes | 6 |
 | Done | Orders | [PUT /accounts/{accountIdKey}/orders/cancel](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.cancel` | CancelOrderRequest | CancelOrderResponse | Yes | Yes | 6 |
-| Planned | Alerts | [GET /user/alerts](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.list` | AlertsRequest | AlertsResponse | No | No | 7 |
-| Planned | Alerts | [GET /user/alerts/{id}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.get` | AlertDetailsRequest | Alert | No | No | 7 |
-| Planned | Alerts | [DELETE /user/alerts/{alert_id_list}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.delete` | DeleteAlertsRequest | DeleteAlertsResponse | No | No | 7 |
+| Done | Alerts | [GET /user/alerts](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.list` | AlertsRequest | AlertsResponse | Yes | Yes | 7 |
+| Done | Alerts | [GET /user/alerts/{id}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.get` | AlertDetailsRequest | AlertDetailsResponse | Yes | Yes | 7 |
+| Done | Alerts | [DELETE /user/alerts/{alert_id_list}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.delete` | alert ID list | DeleteAlertsResponse | Yes | Yes | 7 |
 
 ## Key Technologies
 
@@ -110,7 +110,7 @@ suffixes are format selectors and do not create separate endpoints.
 
 The CLI is intended for authentication bootstrap and manual read-only diagnostics.
 After authenticating with `etrade auth login`, you can manually exercise the
-read-only account, portfolio, transactions, and market data endpoints:
+read-only account, portfolio, transactions, alerts, and market data endpoints:
 
 ```sh
 .venv/bin/etrade accounts list
@@ -124,6 +124,11 @@ read-only account, portfolio, transactions, and market data endpoints:
 .venv/bin/etrade transactions list ACCOUNT_ID_KEY --json
 .venv/bin/etrade transactions get ACCOUNT_ID_KEY TRANSACTION_ID
 .venv/bin/etrade transactions get ACCOUNT_ID_KEY TRANSACTION_ID --json
+.venv/bin/etrade alerts list
+.venv/bin/etrade alerts list --json
+.venv/bin/etrade alerts get ALERT_ID
+.venv/bin/etrade alerts get ALERT_ID --json
+.venv/bin/etrade alerts delete ALERT_ID --confirm-delete
 .venv/bin/etrade market quote AAPL
 .venv/bin/etrade market quote AAPL --json
 .venv/bin/etrade market quotes AAPL MSFT
@@ -139,7 +144,7 @@ read-only account, portfolio, transactions, and market data endpoints:
 ```
 
 The account commands display account IDs and account ID keys because they are
-needed for manual API testing. Order mutation commands require
+needed for manual API testing. Alert deletion requires `--confirm-delete`. Order mutation commands require
 `--confirm-live-order` because they can affect real brokerage accounts in
 production. CLI commands do not print OAuth tokens, token secrets, consumer
 secrets, signatures, or verifier codes.
