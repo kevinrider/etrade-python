@@ -1,0 +1,8 @@
+{
+  "DeleteAlertsResponse": {
+    "result": "ERROR",
+    "failedAlerts": {
+      "alertId": [6772, 6774]
+    }
+  }
+}

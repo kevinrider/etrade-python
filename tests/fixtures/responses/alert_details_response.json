@@ -1,0 +1,13 @@
+{
+  "AlertDetailsResponse": {
+    "id": 6773,
+    "createTime": 1529416825,
+    "subject": "AAPL down by at least 2.00%",
+    "symbol": "AAPL",
+    "msgText": "APPLE INC COM (AAPL) stock has met your target percentage decrease of 2.00%.",
+    "readTime": 0,
+    "deleteTime": 0,
+    "next": "https://api.etrade.com/v1/user/alerts/6772",
+    "prev": "https://api.etrade.com/v1/user/alerts/6774"
+  }
+}
