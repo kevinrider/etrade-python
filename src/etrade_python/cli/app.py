@@ -20,6 +20,8 @@ from etrade_python import (
     CancelOrderResponse,
     OptionChainRequest,
     OptionChainResponse,
+    OptionContract,
+    OptionExpiration,
     OptionExpirationsRequest,
     OptionExpirationsResponse,
     OrderBuilder,
@@ -442,7 +444,7 @@ def orders_demo(
             typer.echo(f"Selected accountIdKey: {account_id_key}")
 
             scenario = _prompt_order_scenario()
-            builder = _build_demo_order(account_id_key, scenario)
+            builder = await _build_demo_order(client, account_id_key, scenario)
             preview_request = builder.build_preview_request()
             typer.echo("Generated preview request:")
             _echo_json(preview_request.request_body())
@@ -689,7 +691,9 @@ def _prompt_order_scenario() -> str:
     )
 
 
-def _build_demo_order(account_id_key: str, scenario: str) -> OrderBuilder:
+async def _build_demo_order(
+    client: ETradeClient, account_id_key: str, scenario: str
+) -> OrderBuilder:
     builder = OrderBuilder.for_account(account_id_key).client_order_id(_prompt_client_order_id())
     if scenario == "equity":
         return builder.equity_limit(
@@ -706,12 +710,12 @@ def _build_demo_order(account_id_key: str, scenario: str) -> OrderBuilder:
             quantity=_prompt_positive_decimal("Quantity", "1"),
             limit_price=_prompt_positive_decimal("Limit price"),
         )
+
+    symbol = _prompt_symbol()
+    expiration = await _prompt_option_expiration(client, symbol)
+    chain = await _get_option_chain(client, symbol, expiration)
+
     if scenario == "single-option":
-        symbol = _prompt_symbol()
-        expiration = _prompt_expiration()
-        strike = _prompt_positive_decimal("Strike price")
-        quantity = _prompt_positive_decimal("Contracts", "1")
-        limit_price = _prompt_positive_decimal("Limit price")
         option_action = _prompt_menu(
             "Option action",
             [
@@ -721,6 +725,13 @@ def _build_demo_order(account_id_key: str, scenario: str) -> OrderBuilder:
                 ("Short put", "short-put"),
             ],
         )
+        option_side = _option_side(option_action)
+        strike, contract = _prompt_option_contract(chain, option_side, "Strike price")
+        quantity = _prompt_positive_decimal("Contracts", "1")
+        suggested = (
+            _contract_ask(contract) if option_action.startswith("long") else _contract_bid(contract)
+        )
+        limit_price = _prompt_limit_with_suggestion("Limit price", suggested)
         builder.order_type("OPTN").with_symbol(symbol).with_expiration(expiration).limit_price(
             limit_price
         )
@@ -731,46 +742,368 @@ def _build_demo_order(account_id_key: str, scenario: str) -> OrderBuilder:
         if option_action == "long-put":
             return builder.add_long_put(strike, quantity)
         return builder.add_short_put(strike, quantity)
+
     if scenario == "vertical":
-        return builder.option_vertical_call(
-            _prompt_symbol(),
-            expiration=_prompt_expiration(),
-            quantity=_prompt_positive_decimal("Contracts", "1"),
-            long_strike=_prompt_positive_decimal("Long call strike"),
-            short_strike=_prompt_positive_decimal("Short call strike"),
-            net_debit=_prompt_positive_decimal("Net debit"),
-        )
+        quantity = _prompt_positive_decimal("Contracts", "1")
+        long_strike, long_call = _prompt_option_contract(chain, "CALL", "Long call strike")
+        short_strike, short_call = _prompt_option_contract(chain, "CALL", "Short call strike")
+        signed_estimate = _subtract(_contract_ask(long_call), _contract_bid(short_call))
+        price_type, price = _prompt_net_price(signed_estimate, "NET_DEBIT")
+        builder.order_type("SPREADS").with_symbol(symbol).with_expiration(expiration)
+        _apply_net_price(builder, price_type, price)
+        return builder.add_long_call(long_strike, quantity).add_short_call(short_strike, quantity)
+
     if scenario == "three-leg":
-        return builder.three_leg_call_spread_short_put(
-            _prompt_symbol(),
-            expiration=_prompt_expiration(),
-            quantity=_prompt_positive_decimal("Contracts", "1"),
-            long_call_strike=_prompt_positive_decimal("Long call strike"),
-            short_call_strike=_prompt_positive_decimal("Short call strike"),
-            short_put_strike=_prompt_positive_decimal("Short put strike"),
-            net_debit=_prompt_positive_decimal("Net debit"),
+        quantity = _prompt_positive_decimal("Contracts", "1")
+        long_call_strike, long_call = _prompt_option_contract(chain, "CALL", "Long call strike")
+        short_call_strike, short_call = _prompt_option_contract(chain, "CALL", "Short call strike")
+        short_put_strike, short_put = _prompt_option_contract(chain, "PUT", "Short put strike")
+        signed_estimate = _subtract(
+            _subtract(_contract_ask(long_call), _contract_bid(short_call)),
+            _contract_bid(short_put),
         )
+        price_type, price = _prompt_net_price(signed_estimate, "NET_DEBIT")
+        builder.order_type("SPREADS").with_symbol(symbol).with_expiration(expiration)
+        _apply_net_price(builder, price_type, price)
+        return (
+            builder.add_long_call(long_call_strike, quantity)
+            .add_short_call(short_call_strike, quantity)
+            .add_short_put(short_put_strike, quantity)
+        )
+
     if scenario == "iron-condor":
-        return builder.iron_condor(
-            _prompt_symbol(),
-            expiration=_prompt_expiration(),
-            quantity=_prompt_positive_decimal("Contracts", "1"),
-            short_put_strike=_prompt_positive_decimal("Short put strike"),
-            long_put_strike=_prompt_positive_decimal("Long put strike"),
-            short_call_strike=_prompt_positive_decimal("Short call strike"),
-            long_call_strike=_prompt_positive_decimal("Long call strike"),
-            net_credit=_prompt_positive_decimal("Net credit"),
+        quantity = _prompt_positive_decimal("Contracts", "1")
+        short_put_strike, short_put = _prompt_option_contract(chain, "PUT", "Short put strike")
+        long_put_strike, long_put = _prompt_option_contract(chain, "PUT", "Long put strike")
+        short_call_strike, short_call = _prompt_option_contract(chain, "CALL", "Short call strike")
+        long_call_strike, long_call = _prompt_option_contract(chain, "CALL", "Long call strike")
+        signed_estimate = _add(
+            _subtract(_contract_bid(short_put), _contract_ask(long_put)),
+            _subtract(_contract_bid(short_call), _contract_ask(long_call)),
         )
+        price_type, price = _prompt_net_price(signed_estimate, "NET_CREDIT")
+        builder.order_type("SPREADS").with_symbol(symbol).with_expiration(expiration)
+        _apply_net_price(builder, price_type, price)
+        return (
+            builder.add_short_put(short_put_strike, quantity)
+            .add_long_put(long_put_strike, quantity)
+            .add_short_call(short_call_strike, quantity)
+            .add_long_call(long_call_strike, quantity)
+        )
+
     if scenario == "buy-write":
+        stock_quantity = _prompt_positive_decimal("Stock quantity", "100")
+        call_quantity = _prompt_positive_decimal("Call contracts", "1")
+        call_strike, call = _prompt_option_contract(chain, "CALL", "Call strike")
+        quote = await _get_quote(client, symbol)
+        suggested = _buy_write_estimate(quote, stock_quantity, call, call_quantity)
+        net_debit = _prompt_limit_with_suggestion("Net debit", suggested)
         return builder.buy_write(
-            _prompt_symbol(),
-            expiration=_prompt_expiration(),
-            stock_quantity=_prompt_positive_decimal("Stock quantity", "100"),
-            call_quantity=_prompt_positive_decimal("Call contracts", "1"),
-            call_strike=_prompt_positive_decimal("Call strike"),
-            net_debit=_prompt_positive_decimal("Net debit"),
+            symbol,
+            expiration=expiration,
+            stock_quantity=stock_quantity,
+            call_quantity=call_quantity,
+            call_strike=call_strike,
+            net_debit=net_debit,
         )
     raise typer.BadParameter("Unknown order scenario")
+
+
+async def _prompt_option_expiration(client: ETradeClient, symbol: str) -> date:
+    expirations = await _get_option_expirations(client, symbol)
+    if expirations:
+        return _prompt_expiration_choice(expirations)
+    fallback = _next_third_friday()
+    typer.echo(f"No option expirations found; using third-Friday fallback {fallback}.")
+    return _prompt_expiration(fallback)
+
+
+async def _get_option_expirations(client: ETradeClient, symbol: str) -> list[OptionExpiration]:
+    try:
+        response = await client.market.get_option_expirations(
+            symbol, OptionExpirationsRequest(expiry_type="ALL")
+        )
+    except ETradeError as exc:
+        typer.echo(f"Could not fetch option expirations: {exc}")
+        return []
+    today = date.today()
+    expirations: list[OptionExpiration] = []
+    for expiration in response.expiration_dates:
+        if expiration.year is None or expiration.month is None or expiration.day is None:
+            continue
+        try:
+            expiration_date = date(expiration.year, expiration.month, expiration.day)
+        except ValueError:
+            continue
+        if expiration_date >= today:
+            expirations.append(expiration)
+    return sorted(expirations, key=_expiration_sort_key)
+
+
+def _prompt_expiration_choice(expirations: list[OptionExpiration]) -> date:
+    default_index = _default_expiration_index(expirations)
+    typer.echo("Available expirations:")
+    for index, expiration in enumerate(expirations[:10], start=1):
+        expiration_date = _expiration_date(expiration)
+        label = expiration_date.isoformat() if expiration_date is not None else "Expiration"
+        suffix = f" {expiration.expiry_type}" if expiration.expiry_type else ""
+        default_marker = " [default]" if index - 1 == default_index else ""
+        typer.echo(f"  {index}. {label}{suffix}{default_marker}")
+    while True:
+        selected = typer.prompt("Expiration", default=str(default_index + 1)).strip()
+        try:
+            index = int(selected)
+        except ValueError:
+            typer.echo("Enter a numbered expiration.")
+            continue
+        if 1 <= index <= min(len(expirations), 10):
+            expiration_date = _expiration_date(expirations[index - 1])
+            if expiration_date is not None:
+                return expiration_date
+        typer.echo("Enter a numbered expiration from the list.")
+
+
+def _default_expiration_index(expirations: list[OptionExpiration]) -> int:
+    for index, expiration in enumerate(expirations):
+        if (expiration.expiry_type or "").upper() == "MONTHLY":
+            return index
+    return 0
+
+
+def _expiration_sort_key(expiration: OptionExpiration) -> tuple[int, int, int]:
+    return (expiration.year or 9999, expiration.month or 12, expiration.day or 31)
+
+
+def _expiration_date(expiration: OptionExpiration) -> date | None:
+    if expiration.year is None or expiration.month is None or expiration.day is None:
+        return None
+    try:
+        return date(expiration.year, expiration.month, expiration.day)
+    except ValueError:
+        return None
+
+
+def _next_third_friday() -> date:
+    today = date.today()
+    year = today.year
+    month = today.month
+    while True:
+        candidate = _third_friday(year, month)
+        if candidate >= today:
+            return candidate
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+
+
+def _third_friday(year: int, month: int) -> date:
+    first_day = date(year, month, 1)
+    days_until_friday = (4 - first_day.weekday()) % 7
+    first_friday = first_day.replace(day=1 + days_until_friday)
+    return first_friday.replace(day=first_friday.day + 14)
+
+
+async def _get_option_chain(
+    client: ETradeClient, symbol: str, expiration: date
+) -> OptionChainResponse | None:
+    try:
+        return await client.market.get_option_chain(
+            symbol,
+            OptionChainRequest(
+                expiry_year=expiration.year,
+                expiry_month=expiration.month,
+                expiry_day=expiration.day,
+                chain_type="CALLPUT",
+                price_type="ALL",
+            ),
+        )
+    except ETradeError as exc:
+        typer.echo(f"Could not fetch option chain: {exc}")
+        return None
+
+
+async def _get_quote(client: ETradeClient, symbol: str) -> Quote | None:
+    try:
+        return await client.market.get_quote(symbol)
+    except ETradeError as exc:
+        typer.echo(f"Could not fetch quote: {exc}")
+        return None
+
+
+def _find_option_contract(
+    chain: OptionChainResponse | None, call_put: str, strike: Decimal
+) -> OptionContract | None:
+    if chain is None:
+        return None
+    for pair in chain.option_pairs:
+        contract = pair.call if call_put == "CALL" else pair.put
+        if contract is not None and contract.strike_price == strike:
+            return contract
+    typer.echo(f"No {call_put.lower()} quote found for strike {strike}; enter price manually.")
+    return None
+
+
+def _prompt_option_contract(
+    chain: OptionChainResponse | None, call_put: str, label: str
+) -> tuple[Decimal, OptionContract | None]:
+    contracts = _option_contracts(chain, call_put)
+    if not contracts:
+        strike = _prompt_positive_decimal(label)
+        return strike, _find_option_contract(chain, call_put, strike)
+
+    visible_contracts = _visible_option_contracts(contracts, chain.near_price if chain else None)
+    default_index = _default_contract_index(visible_contracts, chain.near_price if chain else None)
+    typer.echo(f"Available {call_put.lower()} strikes:")
+    for index, contract in enumerate(visible_contracts, start=1):
+        strike = _format_decimal(contract.strike_price) or "Strike"
+        default_marker = " [default]" if index - 1 == default_index else ""
+        bid = _format_decimal(contract.bid) or "-"
+        ask = _format_decimal(contract.ask) or "-"
+        typer.echo(f"  {index}. {strike} Bid {bid} Ask {ask}{default_marker}")
+
+    while True:
+        selected = typer.prompt(label, default=str(default_index + 1)).strip()
+        try:
+            index = int(selected)
+        except ValueError:
+            typer.echo("Enter a numbered strike.")
+            continue
+        if 1 <= index <= len(visible_contracts):
+            contract = visible_contracts[index - 1]
+            if contract.strike_price is not None:
+                return contract.strike_price, contract
+        typer.echo("Enter a numbered strike from the list.")
+
+
+def _option_contracts(chain: OptionChainResponse | None, call_put: str) -> list[OptionContract]:
+    if chain is None:
+        return []
+    contracts_by_strike: dict[Decimal, OptionContract] = {}
+    for pair in chain.option_pairs:
+        contract = pair.call if call_put == "CALL" else pair.put
+        if contract is None or contract.strike_price is None:
+            continue
+        contracts_by_strike.setdefault(contract.strike_price, contract)
+    return [contracts_by_strike[strike] for strike in sorted(contracts_by_strike)]
+
+
+def _visible_option_contracts(
+    contracts: list[OptionContract], near_price: Decimal | None
+) -> list[OptionContract]:
+    if len(contracts) <= 11 or near_price is None:
+        return contracts
+
+    at_the_money_index = _default_contract_index(contracts, near_price)
+    start = max(0, at_the_money_index - 5)
+    end = min(len(contracts), at_the_money_index + 6)
+    return contracts[start:end]
+
+
+def _default_contract_index(contracts: list[OptionContract], near_price: Decimal | None) -> int:
+    if not contracts or near_price is None:
+        return 0
+    return min(
+        range(len(contracts)),
+        key=lambda index: abs((contracts[index].strike_price or near_price) - near_price),
+    )
+
+
+def _contract_bid(contract: OptionContract | None) -> Decimal | None:
+    return contract.bid if contract is not None else None
+
+
+def _contract_ask(contract: OptionContract | None) -> Decimal | None:
+    return contract.ask if contract is not None else None
+
+
+def _option_side(option_action: str) -> str:
+    return "PUT" if option_action.endswith("put") else "CALL"
+
+
+def _prompt_limit_with_suggestion(label: str, suggested: Decimal | None) -> Decimal:
+    default = _format_decimal(suggested) if suggested is not None and suggested > 0 else None
+    if suggested is not None and suggested > 0:
+        typer.echo(f"Suggested {label.lower()}: {suggested}")
+    return _prompt_positive_decimal(label, default)
+
+
+def _prompt_net_price(
+    signed_estimate: Decimal | None, fallback_price_type: str
+) -> tuple[str, Decimal]:
+    default_price_type = fallback_price_type
+    default_price: Decimal | None = None
+    if signed_estimate is not None:
+        if signed_estimate < 0:
+            default_price_type = "NET_CREDIT"
+            default_price = abs(signed_estimate)
+            typer.echo(f"Estimated net credit: {default_price}")
+        elif signed_estimate > 0:
+            default_price_type = "NET_DEBIT"
+            default_price = signed_estimate
+            typer.echo(f"Estimated net debit: {default_price}")
+        else:
+            typer.echo("Estimated net even: 0")
+    price_type = _prompt_net_price_type(default_price_type)
+    label = "Net credit" if price_type == "NET_CREDIT" else "Net debit"
+    default = _format_decimal(default_price) if default_price is not None else None
+    price = _prompt_positive_decimal(label, default)
+    return price_type, price
+
+
+def _prompt_net_price_type(default: str) -> str:
+    while True:
+        value = typer.prompt("Price type", default=default).strip().upper()
+        if value in {"NET_DEBIT", "NET_CREDIT"}:
+            return value
+        typer.echo("Price type must be NET_DEBIT or NET_CREDIT.")
+
+
+def _apply_net_price(builder: OrderBuilder, price_type: str, price: Decimal) -> None:
+    if price_type == "NET_CREDIT":
+        builder.net_credit(price)
+    else:
+        builder.net_debit(price)
+
+
+def _add(left: Decimal | None, right: Decimal | None) -> Decimal | None:
+    if left is None or right is None:
+        return None
+    return left + right
+
+
+def _subtract(left: Decimal | None, right: Decimal | None) -> Decimal | None:
+    if left is None or right is None:
+        return None
+    return left - right
+
+
+def _buy_write_estimate(
+    quote: Quote | None,
+    stock_quantity: Decimal,
+    call: OptionContract | None,
+    call_quantity: Decimal,
+) -> Decimal | None:
+    stock_ask = _quote_ask(quote)
+    call_bid = _contract_bid(call)
+    if stock_ask is None or call_bid is None:
+        return None
+    return stock_ask * stock_quantity - call_bid * call_quantity * Decimal("100")
+
+
+def _quote_ask(quote: Quote | None) -> Decimal | None:
+    if quote is None:
+        return None
+    details = quote.all or quote.intraday or quote.fundamental or quote.option or quote.week52
+    if details is None:
+        return None
+    return details.ask
+
+
+def _format_decimal(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return format(value.normalize(), "f")
 
 
 def _prompt_client_order_id() -> str:
@@ -790,11 +1123,21 @@ def _prompt_symbol() -> str:
     return _prompt_nonempty("Symbol").upper()
 
 
-def _prompt_expiration() -> date:
+def _prompt_expiration(default: date | None = None) -> date:
     return date(
-        _prompt_int("Expiration year"),
-        _prompt_int("Expiration month", minimum=1, maximum=12),
-        _prompt_int("Expiration day", minimum=1, maximum=31),
+        _prompt_int("Expiration year", default=default.year if default is not None else None),
+        _prompt_int(
+            "Expiration month",
+            minimum=1,
+            maximum=12,
+            default=default.month if default is not None else None,
+        ),
+        _prompt_int(
+            "Expiration day",
+            minimum=1,
+            maximum=31,
+            default=default.day if default is not None else None,
+        ),
     )
 
 
@@ -822,9 +1165,14 @@ def _prompt_nonempty(label: str, default: str | None = None) -> str:
         typer.echo(f"{label} is required.")
 
 
-def _prompt_int(label: str, minimum: int | None = None, maximum: int | None = None) -> int:
+def _prompt_int(
+    label: str,
+    minimum: int | None = None,
+    maximum: int | None = None,
+    default: int | None = None,
+) -> int:
     while True:
-        raw = typer.prompt(label).strip()
+        raw = typer.prompt(label, default=str(default) if default is not None else None).strip()
         try:
             value = int(raw)
         except ValueError:

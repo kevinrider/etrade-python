@@ -1,10 +1,13 @@
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import SecretStr
 from typer.testing import CliRunner
 
+import etrade_python.cli.app as cli_app
 from etrade_python import (
     Account,
     AccountBalanceRequest,
@@ -37,6 +40,10 @@ from etrade_python.auth import AuthorizationUrl, RequestToken, TokenStatus
 from etrade_python.cli.app import app
 
 runner = CliRunner()
+
+
+def _cli_private(name: str) -> Any:
+    return getattr(cli_app, name)
 
 
 class FakeOAuth:
@@ -249,6 +256,17 @@ class FakeMarket:
     ) -> OptionExpirationsResponse:
         self._client.market_option_expirations_symbol = symbol
         self._client.market_option_expirations_request = request
+        if self._client.profile == "empty-expirations":
+            return OptionExpirationsResponse.model_validate({"ExpirationDate": []})
+        if self._client.profile == "weekly-expirations":
+            return OptionExpirationsResponse.model_validate(
+                {
+                    "ExpirationDate": [
+                        {"year": 2026, "month": 10, "day": 9, "expiryType": "WEEKLY"},
+                        {"year": 2026, "month": 10, "day": 23, "expiryType": "WEEKLY"},
+                    ]
+                }
+            )
         return OptionExpirationsResponse.model_validate(
             {"ExpirationDate": {"year": 2026, "month": 10, "day": 16, "expiryType": "MONTHLY"}}
         )
@@ -258,25 +276,31 @@ class FakeMarket:
     ) -> OptionChainResponse:
         self._client.market_option_chain_symbol = symbol
         self._client.market_option_chain_request = request
-        return OptionChainResponse.model_validate(
-            {
-                "quoteType": "DELAYED",
-                "nearPrice": Decimal("200"),
-                "OptionPair": {
+        if self._client.profile == "empty-chain":
+            return OptionChainResponse.model_validate(
+                {"quoteType": "DELAYED", "nearPrice": Decimal("200"), "OptionPair": []}
+            )
+        pairs: list[dict[str, object]] = []
+        for strike in [175, 180, 190, 195, 200, 210, 215]:
+            strike_decimal = Decimal(str(strike))
+            pairs.append(
+                {
                     "Call": {
-                        "displaySymbol": "AAPL Oct 16 '26 $200 Call",
-                        "strikePrice": Decimal("200"),
-                        "bid": Decimal("3.20"),
-                        "ask": Decimal("3.40"),
+                        "displaySymbol": f"AAPL Oct 16 '26 ${strike} Call",
+                        "strikePrice": strike_decimal,
+                        "bid": Decimal(str(strike / 100)),
+                        "ask": Decimal(str(strike / 100 + 0.20)),
                     },
                     "Put": {
-                        "displaySymbol": "AAPL Oct 16 '26 $200 Put",
-                        "strikePrice": Decimal("200"),
-                        "bid": Decimal("2.10"),
-                        "ask": Decimal("2.25"),
+                        "displaySymbol": f"AAPL Oct 16 '26 ${strike} Put",
+                        "strikePrice": strike_decimal,
+                        "bid": Decimal(str((220 - strike) / 100)),
+                        "ask": Decimal(str((220 - strike) / 100 + 0.15)),
                     },
-                },
-            }
+                }
+            )
+        return OptionChainResponse.model_validate(
+            {"quoteType": "DELAYED", "nearPrice": Decimal("200"), "OptionPair": pairs}
         )
 
 
@@ -757,7 +781,7 @@ def test_market_option_chain_human_output(monkeypatch: pytest.MonkeyPatch) -> No
     assert result.exit_code == 0
     assert "Quote type: DELAYED" in result.output
     assert "AAPL Oct 16 '26 $200 Call" in result.output
-    assert "Ask: 3.40" in result.output
+    assert "Ask: 2.2" in result.output
     assert "AAPL Oct 16 '26 $200 Put" in result.output
     client = FakeClient.instances[0]
     assert client.market_option_chain_symbol == "AAPL"
@@ -972,6 +996,167 @@ def test_orders_demo_help() -> None:
     assert "Run an interactive order preview/place/change/cancel demo" in result.output
 
 
+def test_orders_demo_helper_fallbacks() -> None:
+    third_friday = _cli_private("_third_friday")
+    expiration_date = _cli_private("_expiration_date")
+    default_expiration_index = _cli_private("_default_expiration_index")
+    add = _cli_private("_add")
+    subtract = _cli_private("_subtract")
+    format_decimal = _cli_private("_format_decimal")
+    option_side = _cli_private("_option_side")
+
+    assert third_friday(2026, 10) == date(2026, 10, 16)
+    assert expiration_date(cli_app.OptionExpiration()) is None
+    assert (
+        default_expiration_index(
+            [
+                cli_app.OptionExpiration(year=2026, month=10, day=9, expiryType="WEEKLY"),
+                cli_app.OptionExpiration(year=2026, month=10, day=16, expiryType="MONTHLY"),
+            ]
+        )
+        == 1
+    )
+    assert add(Decimal("1"), None) is None
+    assert subtract(None, Decimal("1")) is None
+    assert format_decimal(None) is None
+    assert format_decimal(Decimal("100.00")) == "100"
+    assert option_side("long-put") == "PUT"
+    assert option_side("long-call") == "CALL"
+
+
+def test_orders_demo_quote_and_contract_helpers() -> None:
+    chain = OptionChainResponse.model_validate(
+        {
+            "OptionPair": {
+                "Call": {
+                    "strikePrice": Decimal("200"),
+                    "bid": Decimal("3.20"),
+                    "ask": Decimal("3.40"),
+                },
+                "Put": {
+                    "strikePrice": Decimal("200"),
+                    "bid": Decimal("2.10"),
+                    "ask": Decimal("2.25"),
+                },
+            }
+        }
+    )
+    quote = Quote.model_validate(
+        {
+            "Product": {"symbol": "AAPL", "securityType": "EQ"},
+            "All": {"ask": Decimal("200.00")},
+        }
+    )
+
+    find_option_contract = _cli_private("_find_option_contract")
+    option_contracts = _cli_private("_option_contracts")
+    visible_option_contracts = _cli_private("_visible_option_contracts")
+    default_contract_index = _cli_private("_default_contract_index")
+    contract_ask = _cli_private("_contract_ask")
+    contract_bid = _cli_private("_contract_bid")
+    quote_ask = _cli_private("_quote_ask")
+    buy_write_estimate = _cli_private("_buy_write_estimate")
+
+    contracts = option_contracts(chain, "CALL")
+    assert [contract.strike_price for contract in contracts] == [Decimal("200")]
+    assert option_contracts(None, "CALL") == []
+    assert visible_option_contracts(contracts, Decimal("200")) == contracts
+    assert default_contract_index([], Decimal("200")) == 0
+    assert default_contract_index(contracts, None) == 0
+    assert default_contract_index(contracts, Decimal("201")) == 0
+    assert contract_ask(find_option_contract(chain, "CALL", Decimal("200"))) == Decimal("3.40")
+    assert contract_bid(None) is None
+    assert contract_ask(None) is None
+    assert find_option_contract(None, "CALL", Decimal("200")) is None
+    assert find_option_contract(chain, "CALL", Decimal("201")) is None
+    assert quote_ask(quote) == Decimal("200.00")
+    assert (
+        quote_ask(Quote.model_validate({"Product": {"symbol": "AAPL", "securityType": "EQ"}}))
+        is None
+    )
+    assert quote_ask(None) is None
+    assert (
+        buy_write_estimate(None, Decimal("100"), chain.option_pairs[0].call, Decimal("1")) is None
+    )
+    assert buy_write_estimate(
+        quote, Decimal("100"), chain.option_pairs[0].call, Decimal("1")
+    ) == Decimal("19680.00")
+
+
+def test_orders_demo_option_contracts_are_sorted_and_deduplicated() -> None:
+    chain = OptionChainResponse.model_validate(
+        {
+            "nearPrice": Decimal("207"),
+            "OptionPair": [
+                {"Call": {"strikePrice": Decimal("210"), "bid": Decimal("1")}},
+                {"Call": {"bid": Decimal("0")}},
+                {"Call": {"strikePrice": Decimal("200"), "bid": Decimal("2")}},
+                {"Call": {"strikePrice": Decimal("200"), "bid": Decimal("9")}},
+            ],
+        }
+    )
+    option_contracts = _cli_private("_option_contracts")
+    default_contract_index = _cli_private("_default_contract_index")
+
+    contracts = option_contracts(chain, "CALL")
+
+    assert [contract.strike_price for contract in contracts] == [Decimal("200"), Decimal("210")]
+    assert contracts[0].bid == Decimal("2")
+    assert default_contract_index(contracts, chain.near_price) == 1
+
+
+def test_orders_demo_visible_option_contracts_window_around_near_price() -> None:
+    contracts = [
+        cli_app.OptionContract(strikePrice=Decimal(str(strike))) for strike in range(250, 370, 5)
+    ]
+    visible_option_contracts = _cli_private("_visible_option_contracts")
+
+    visible = visible_option_contracts(contracts, Decimal("300"))
+
+    assert [contract.strike_price for contract in visible] == [
+        Decimal("275"),
+        Decimal("280"),
+        Decimal("285"),
+        Decimal("290"),
+        Decimal("295"),
+        Decimal("300"),
+        Decimal("305"),
+        Decimal("310"),
+        Decimal("315"),
+        Decimal("320"),
+        Decimal("325"),
+    ]
+
+
+def test_orders_demo_visible_option_contracts_window_handles_chain_edges() -> None:
+    contracts = [
+        cli_app.OptionContract(strikePrice=Decimal(str(strike))) for strike in range(250, 370, 5)
+    ]
+    visible_option_contracts = _cli_private("_visible_option_contracts")
+
+    low_visible = visible_option_contracts(contracts, Decimal("255"))
+    high_visible = visible_option_contracts(contracts, Decimal("360"))
+
+    assert [contract.strike_price for contract in low_visible] == [
+        Decimal("250"),
+        Decimal("255"),
+        Decimal("260"),
+        Decimal("265"),
+        Decimal("270"),
+        Decimal("275"),
+        Decimal("280"),
+    ]
+    assert [contract.strike_price for contract in high_visible] == [
+        Decimal("335"),
+        Decimal("340"),
+        Decimal("345"),
+        Decimal("350"),
+        Decimal("355"),
+        Decimal("360"),
+        Decimal("365"),
+    ]
+
+
 def test_orders_demo_no_accounts_exits_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
     set_env(monkeypatch)
     monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
@@ -1075,11 +1260,11 @@ def test_orders_demo_full_order_lifecycle(monkeypatch: pytest.MonkeyPatch) -> No
 @pytest.mark.parametrize(
     ("scenario_input", "expected_order_type"),
     [
-        ("2\ndemooption\nAAPL\n2026\n10\n16\n200\n\n3.25\n1\nn\n", "OPTN"),
-        ("3\ndemovertical\nAAPL\n2026\n10\n16\n\n195\n200\n2.25\nn\n", "SPREADS"),
-        ("4\ndemothree\nAAPL\n2026\n10\n16\n\n190\n200\n175\n4.25\nn\n", "SPREADS"),
-        ("5\ndemocondor\nAAPL\n2026\n10\n16\n\n180\n175\n210\n215\n1.10\nn\n", "SPREADS"),
-        ("6\ndemobuywrite\nAAPL\n2026\n10\n16\n\n\n210\n198.50\nn\n", "BUY_WRITES"),
+        ("2\ndemooption\nAAPL\n\n1\n\n\n\nn\n", "OPTN"),
+        ("3\ndemovertical\nAAPL\n\n\n4\n5\n\n\nn\n", "SPREADS"),
+        ("4\ndemothree\nAAPL\n\n\n3\n5\n1\n\n\nn\n", "SPREADS"),
+        ("5\ndemocondor\nAAPL\n\n\n2\n1\n6\n7\n\n\nn\n", "SPREADS"),
+        ("6\ndemobuywrite\nAAPL\n\n\n\n6\n\nn\n", "BUY_WRITES"),
     ],
 )
 def test_orders_demo_scenarios_preview_only(
@@ -1117,6 +1302,98 @@ def test_orders_demo_reprompts_for_invalid_choices_and_values(
     assert "Quantity must be greater than zero." in result.output
     assert "Limit price must be a decimal number." in result.output
     assert "Limit price must be greater than zero." in result.output
+    assert FakeClient.instances[0].order_preview_request is not None
+
+
+def test_orders_demo_uses_third_friday_fallback_when_no_expirations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo", "--profile", "empty-expirations"],
+        input="1\n2\ndemooption\nAAPL\n\n\n\n1\n\n\n3.25\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "third-Friday fallback" in result.output
+    assert FakeClient.instances[0].order_preview_request is not None
+
+
+def test_orders_demo_missing_chain_quote_falls_back_to_manual_price(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo", "--profile", "empty-chain"],
+        input="1\n2\ndemooption\nAAPL\n\n1\n200\n\n3.25\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "No call quote found for strike 200" in result.output
+    assert FakeClient.instances[0].order_preview_request is not None
+
+
+def test_orders_demo_reprompts_for_unavailable_chain_strike(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n2\ndemooption\nAAPL\n\n1\n125\n5\n\n\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Available call strikes:" in result.output
+    assert "Enter a numbered strike from the list." in result.output
+    client = FakeClient.instances[0]
+    assert client.order_preview_request is not None
+    assert client.order_preview_request.orders[0].instruments[0].product.strike_price == Decimal(
+        "200"
+    )
+
+
+def test_orders_demo_uses_nearest_expiration_when_no_monthly_expiration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo", "--profile", "weekly-expirations"],
+        input="1\n2\ndemooption\nAAPL\n\n1\n\n\n3.25\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "2026-10-09 WEEKLY [default]" in result.output
+    client = FakeClient.instances[0]
+    assert client.order_preview_request is not None
+    assert client.order_preview_request.orders[0].instruments[0].product.expiry_day == 9
+
+
+def test_orders_demo_reprompts_for_invalid_net_price_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n3\ndemovertical\nAAPL\n\n\n4\n5\nBAD\nNET_DEBIT\n1.00\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Price type must be NET_DEBIT or NET_CREDIT." in result.output
     assert FakeClient.instances[0].order_preview_request is not None
 
 
