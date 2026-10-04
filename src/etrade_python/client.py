@@ -3,6 +3,7 @@
 import httpx
 
 from etrade_python.accounts.service import AccountsService
+from etrade_python.alerts.service import AlertsService
 from etrade_python.auth.oauth import OAuthClient
 from etrade_python.auth.session import SessionAuthenticator, SessionManager
 from etrade_python.auth.stores import CredentialStore, KeyringCredentialStore
@@ -59,6 +60,7 @@ class ETradeClient:
         self.transactions = TransactionsService(self._transport)
         self.market = MarketService(self._transport)
         self.orders = OrdersService(self._transport)
+        self.alerts = AlertsService(self._transport)
         self._closed = False
 
     @classmethod

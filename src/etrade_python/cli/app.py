@@ -17,7 +17,12 @@ from etrade_python import (
     AccountBalanceRequest,
     AccountBalanceResponse,
     AccountListResponse,
+    AlertDetailsRequest,
+    AlertDetailsResponse,
+    AlertsRequest,
+    AlertsResponse,
     CancelOrderResponse,
+    DeleteAlertsResponse,
     OptionChainRequest,
     OptionChainResponse,
     OptionContract,
@@ -56,12 +61,14 @@ auth_app = typer.Typer(no_args_is_help=True)
 accounts_app = typer.Typer(no_args_is_help=True)
 portfolio_app = typer.Typer(no_args_is_help=True)
 transactions_app = typer.Typer(no_args_is_help=True)
+alerts_app = typer.Typer(no_args_is_help=True)
 market_app = typer.Typer(no_args_is_help=True)
 orders_app = typer.Typer(no_args_is_help=True)
 app.add_typer(auth_app, name="auth")
 app.add_typer(accounts_app, name="accounts")
 app.add_typer(portfolio_app, name="portfolio")
 app.add_typer(transactions_app, name="transactions")
+app.add_typer(alerts_app, name="alerts")
 app.add_typer(market_app, name="market")
 app.add_typer(orders_app, name="orders")
 
@@ -269,6 +276,77 @@ def get_transaction(
                 _echo_json(response)
                 return
             _echo_transaction_details(response)
+
+    _handle(command())
+
+
+@alerts_app.command("list")
+def list_alerts(
+    profile: str = typer.Option("default", "--profile", "-p"),
+    count: int | None = typer.Option(None, "--count"),
+    category: str | None = typer.Option(None, "--category"),
+    status: str | None = typer.Option(None, "--status"),
+    direction: str | None = typer.Option(None, "--direction"),
+    search: str | None = typer.Option(None, "--search"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """List user alerts."""
+
+    async def command() -> None:
+        request = AlertsRequest(
+            count=count, category=category, status=status, direction=direction, search=search
+        )
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.alerts.list(request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_alerts(response)
+
+    _handle(command())
+
+
+@alerts_app.command("get")
+def get_alert(
+    alert_id: int = typer.Argument(..., help="Alert ID to fetch."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    html_tags: bool | None = typer.Option(None, "--html-tags/--no-html-tags"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Show details for one alert."""
+
+    async def command() -> None:
+        request = AlertDetailsRequest(htmlTags=html_tags)
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.alerts.get(alert_id, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_alert_details(response)
+
+    _handle(command())
+
+
+@alerts_app.command("delete")
+def delete_alerts(
+    alert_ids: Annotated[list[int], typer.Argument(help="One or more alert IDs to delete.")],
+    profile: str = typer.Option("default", "--profile", "-p"),
+    confirm_delete: bool = typer.Option(False, "--confirm-delete"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Delete one or more alerts."""
+
+    if not confirm_delete:
+        typer.echo("Refusing to delete alerts without --confirm-delete.")
+        raise typer.Exit(code=1)
+
+    async def command() -> None:
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.alerts.delete(alert_ids)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_delete_alerts(response)
 
     _handle(command())
 
@@ -1353,6 +1431,39 @@ def _echo_transaction_details(response: TransactionDetailsResponse) -> None:
             _echo_optional("Symbol", transaction.brokerage.product.symbol)
         _echo_optional_decimal("Quantity", transaction.brokerage.quantity)
         _echo_optional_decimal("Price", transaction.brokerage.price)
+
+
+def _echo_alerts(response: AlertsResponse) -> None:
+    _echo_optional("Total alerts", response.total_alerts)
+    if not response.alerts:
+        typer.echo("No alerts found.")
+        return
+    for alert in response.alerts:
+        typer.echo(alert.subject or f"Alert {alert.id}")
+        _echo_optional("  Alert ID", alert.id)
+        _echo_optional("  Created", alert.create_time)
+        _echo_optional("  Status", alert.status)
+
+
+def _echo_alert_details(response: AlertDetailsResponse) -> None:
+    typer.echo(response.subject or f"Alert {response.id}")
+    _echo_optional("Alert ID", response.id)
+    _echo_optional("Created", response.create_time)
+    _echo_optional("Status", response.status)
+    _echo_optional("Symbol", response.symbol)
+    _echo_optional("Message", response.msg_text)
+    _echo_optional("Read time", response.read_time)
+    _echo_optional("Delete time", response.delete_time)
+    _echo_optional("Next", response.next)
+    _echo_optional("Previous", response.prev)
+
+
+def _echo_delete_alerts(response: DeleteAlertsResponse) -> None:
+    _echo_optional("Result", response.result)
+    if response.failed_alerts is not None and response.failed_alerts.alert_ids:
+        typer.echo(
+            "Failed alert IDs: " + ", ".join(str(item) for item in response.failed_alerts.alert_ids)
+        )
 
 
 def _echo_orders(response: OrdersResponse) -> None:

@@ -7,6 +7,16 @@ from etrade_python.accounts import (
     AccountListResponse,
     AccountsService,
 )
+from etrade_python.alerts import (
+    Alert,
+    AlertDetailsRequest,
+    AlertDetailsResponse,
+    AlertsRequest,
+    AlertsResponse,
+    AlertsService,
+    DeleteAlertsResponse,
+    FailedAlerts,
+)
 from etrade_python.auth import (
     AuthorizationUrl,
     CredentialStore,
@@ -105,6 +115,14 @@ from etrade_python.transactions import (
 
 __version__ = "0.1.0.dev0"
 __all__ = [
+    "Alert",
+    "AlertDetailsRequest",
+    "AlertDetailsResponse",
+    "AlertsRequest",
+    "AlertsResponse",
+    "AlertsService",
+    "DeleteAlertsResponse",
+    "FailedAlerts",
     "OrderBuilder",
     "PreviewOrderResponse",
     "PreviewOrderRequest",
