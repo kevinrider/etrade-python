@@ -86,6 +86,8 @@ class FakeAccounts:
     async def list(self) -> AccountListResponse:
         if self._client.profile == "error":
             raise ETradeValidationError("fake account failure")
+        if self._client.profile == "empty-accounts":
+            return AccountListResponse(accounts=[])
         return AccountListResponse(
             accounts=[
                 Account(
@@ -314,6 +316,15 @@ class FakeOrders:
     ) -> PreviewOrderResponse:
         self._client.order_preview_account_id_key = account_id_key
         self._client.order_preview_request = request
+        if self._client.profile == "no-preview-ids":
+            return PreviewOrderResponse.model_validate(
+                {
+                    "orderType": "EQ",
+                    "totalOrderValue": Decimal("100.00"),
+                    "PreviewIds": [],
+                    "Order": {"priceType": "LIMIT", "limitPrice": Decimal("100.00")},
+                }
+            )
         return PreviewOrderResponse.model_validate(
             {
                 "orderType": "EQ",
@@ -344,7 +355,9 @@ class FakeOrders:
         self._client.order_place_change_account_id_key = account_id_key
         self._client.order_place_change_order_id = order_id
         self._client.order_place_change_request = request
-        return await self.place(account_id_key, request)
+        return PlaceOrderResponse.model_validate(
+            {"orderType": "EQ", "OrderIds": {"orderId": 789}, "Order": {"priceType": "LIMIT"}}
+        )
 
     async def cancel(self, account_id_key: str, order_id: int) -> CancelOrderResponse:
         self._client.order_cancel_account_id_key = account_id_key
@@ -931,7 +944,7 @@ def test_orders_place_change_with_confirmation(
     )
 
     assert result.exit_code == 0
-    assert '"orderId": 456' in result.output
+    assert '"orderId": 789' in result.output
     client = FakeClient.instances[0]
     assert client.order_place_change_account_id_key == "fake-account-key"
     assert client.order_place_change_order_id == 456
@@ -950,6 +963,192 @@ def test_orders_place_change_requires_confirmation(
     assert result.exit_code == 1
     assert "require --confirm-live-order" in result.output
     assert FakeClient.instances == []
+
+
+def test_orders_demo_help() -> None:
+    result = runner.invoke(app, ["orders", "demo", "--help"])
+
+    assert result.exit_code == 0
+    assert "Run an interactive order preview/place/change/cancel demo" in result.output
+
+
+def test_orders_demo_no_accounts_exits_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["orders", "demo", "--profile", "empty-accounts"])
+
+    assert result.exit_code == 1
+    assert "No accounts found." in result.output
+
+
+def test_orders_demo_equity_preview_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n1\ndemoorder\nAAPL\n1\n\n100\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Selected accountIdKey: fake-account-key" in result.output
+    assert "Generated preview request" in result.output
+    assert "Preview IDs: 123" in result.output
+    assert "Order placement skipped." in result.output
+    client = FakeClient.instances[0]
+    assert client.order_preview_account_id_key == "fake-account-key"
+    assert client.order_preview_request is not None
+    assert client.order_preview_request.client_order_id == "demoorder"
+    assert client.order_preview_request.orders[0].limit_price == Decimal("100")
+    assert client.order_place_request is None
+
+
+def test_orders_demo_preview_prints_wire_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n1\ndemoorder\nAAPL\n1\n\n100\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert '"PreviewOrderRequest"' in result.output
+    assert "broker_metadata" not in result.output
+
+
+def test_orders_demo_reprompts_for_invalid_client_order_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n1\ndemo-order\ndemoorder\nAAPL\n1\n\n100\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Client order ID must be 1-20 alphanumeric characters." in result.output
+    assert FakeClient.instances[0].order_preview_request is not None
+    assert FakeClient.instances[0].order_preview_request.client_order_id == "demoorder"
+
+
+def test_orders_demo_full_order_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n1\ndemoorder\nAAPL\n1\n\n100\ny\ny\n101\ny\ny\ny\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Place response:" in result.output
+    assert "Change preview response:" in result.output
+    assert "Change place response:" in result.output
+    assert "Cancel response:" in result.output
+    client = FakeClient.instances[0]
+    assert client.order_place_account_id_key == "fake-account-key"
+    assert client.order_place_request is not None
+    assert client.order_place_request.preview_ids[0].preview_id == 123
+    assert client.order_preview_change_order_id == 456
+    assert client.order_preview_change_request is not None
+    assert client.order_preview_change_request.orders[0].limit_price == Decimal("101")
+    assert client.order_preview_change_request.client_order_id != "demoorder"
+    assert client.order_preview_change_request.client_order_id.startswith("epdemo")
+    assert client.order_place_change_order_id == 456
+    assert client.order_place_change_request is not None
+    assert (
+        client.order_place_change_request.client_order_id
+        == client.order_preview_change_request.client_order_id
+    )
+    assert "Current order ID: 789" in result.output
+    assert client.order_cancel_order_id == 789
+
+
+@pytest.mark.parametrize(
+    ("scenario_input", "expected_order_type"),
+    [
+        ("2\ndemooption\nAAPL\n2026\n10\n16\n200\n\n3.25\n1\nn\n", "OPTN"),
+        ("3\ndemovertical\nAAPL\n2026\n10\n16\n\n195\n200\n2.25\nn\n", "SPREADS"),
+        ("4\ndemothree\nAAPL\n2026\n10\n16\n\n190\n200\n175\n4.25\nn\n", "SPREADS"),
+        ("5\ndemocondor\nAAPL\n2026\n10\n16\n\n180\n175\n210\n215\n1.10\nn\n", "SPREADS"),
+        ("6\ndemobuywrite\nAAPL\n2026\n10\n16\n\n\n210\n198.50\nn\n", "BUY_WRITES"),
+    ],
+)
+def test_orders_demo_scenarios_preview_only(
+    monkeypatch: pytest.MonkeyPatch, scenario_input: str, expected_order_type: str
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["orders", "demo"], input="1\n" + scenario_input)
+
+    assert result.exit_code == 0
+    assert "Generated preview request" in result.output
+    client = FakeClient.instances[0]
+    assert client.order_preview_request is not None
+    assert client.order_preview_request.order_type == expected_order_type
+    assert client.order_place_request is None
+
+
+def test_orders_demo_reprompts_for_invalid_choices_and_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input=("x\n99\n1\nnope\n9\n1\n\n\nAAPL\nbad-action\n1\nabc\n0\n1\nabc\n0\n100\nn\n"),
+    )
+
+    assert result.exit_code == 0
+    assert "Enter a numbered choice." in result.output
+    assert "Enter a numbered choice from the menu." in result.output
+    assert "Quantity must be a decimal number." in result.output
+    assert "Quantity must be greater than zero." in result.output
+    assert "Limit price must be a decimal number." in result.output
+    assert "Limit price must be greater than zero." in result.output
+    assert FakeClient.instances[0].order_preview_request is not None
+
+
+def test_orders_demo_no_preview_ids_skips_placement(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo", "--profile", "no-preview-ids"],
+        input="1\n1\ndemoorder\nAAPL\n1\n\n100\n",
+    )
+
+    assert result.exit_code == 0
+    assert "No preview IDs were returned; skipping placement." in result.output
+    assert FakeClient.instances[0].order_place_request is None
+
+
+def test_orders_demo_production_warning_before_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setenv("ETRADE_ENVIRONMENT", "production")
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n1\ndemoorder\nAAPL\n1\n\n100\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Production environment: this action affects a real brokerage account." in result.output
+    assert FakeClient.instances[0].order_place_request is None
 
 
 def test_orders_invalid_request_file_exits_cleanly(

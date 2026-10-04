@@ -156,7 +156,7 @@ from etrade_python import OrderBuilder
 
 builder = (
     OrderBuilder.for_account(account_id_key)
-    .client_order_id("manual-test-001")
+    .client_order_id("manualtest001")
     .equity_limit("AAPL", action="BUY", quantity=1, limit_price=Decimal("1.00"))
 )
 

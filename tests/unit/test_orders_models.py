@@ -64,6 +64,32 @@ def test_preview_order_request_serializes_envelope() -> None:
     assert request.orders[0].instruments[0].product.symbol == "FB"
 
 
+@pytest.mark.parametrize("client_order_id", ["abc123", "A" * 20])
+def test_preview_order_request_accepts_valid_client_order_ids(client_order_id: str) -> None:
+    payload = load_json_fixture("responses/preview_order_request_equity.json")[
+        "PreviewOrderRequest"
+    ]
+    payload["clientOrderId"] = client_order_id
+
+    request = PreviewOrderRequest.model_validate(payload)
+
+    assert request.client_order_id == client_order_id
+
+
+@pytest.mark.parametrize(
+    "client_order_id",
+    ["", " ", "A" * 21, "demo-order", "demo order", "demo_order", "demo$order"],
+)
+def test_preview_order_request_rejects_invalid_client_order_ids(client_order_id: str) -> None:
+    payload = load_json_fixture("responses/preview_order_request_equity.json")[
+        "PreviewOrderRequest"
+    ]
+    payload["clientOrderId"] = client_order_id
+
+    with pytest.raises(ValidationError, match="client_order_id"):
+        PreviewOrderRequest.model_validate(payload)
+
+
 def test_place_order_request_normalizes_preview_ids() -> None:
     request = PlaceOrderRequest.model_validate(
         {

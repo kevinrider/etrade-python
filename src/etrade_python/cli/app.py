@@ -3,14 +3,17 @@
 import asyncio
 import json
 from collections.abc import Coroutine
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated, Any, TypeVar, cast
+from uuid import uuid4
 
 import typer
 from pydantic import BaseModel
 
 from etrade_python import (
+    Account,
     AccountBalanceRequest,
     AccountBalanceResponse,
     AccountListResponse,
@@ -19,6 +22,7 @@ from etrade_python import (
     OptionChainResponse,
     OptionExpirationsRequest,
     OptionExpirationsResponse,
+    OrderBuilder,
     OrdersRequest,
     OrdersResponse,
     PlaceOrderRequest,
@@ -43,6 +47,7 @@ from etrade_python.config import ETradeSettings
 from etrade_python.exceptions import ETradeError
 
 TModel = TypeVar("TModel", bound=BaseModel)
+TChoice = TypeVar("TChoice")
 
 app = typer.Typer(no_args_is_help=True, invoke_without_command=True)
 auth_app = typer.Typer(no_args_is_help=True)
@@ -420,6 +425,92 @@ def cancel_order(
     _handle(command())
 
 
+@orders_app.command("demo")
+def orders_demo(
+    profile: str = typer.Option("default", "--profile", "-p"),
+) -> None:
+    """Run an interactive order preview/place/change/cancel demo."""
+
+    async def command() -> None:
+        settings = _settings()
+        async with ETradeClient(settings, profile=profile) as client:
+            accounts = await client.accounts.list()
+            account = _prompt_account(accounts)
+            account_id_key = account.account_id_key
+            typer.echo(f"Profile: {profile}")
+            typer.echo(f"Environment: {settings.environment.value}")
+            typer.echo(f"Selected accountIdKey: {account_id_key}")
+
+            scenario = _prompt_order_scenario()
+            builder = _build_demo_order(account_id_key, scenario)
+            preview_request = builder.build_preview_request()
+            typer.echo("Generated preview request:")
+            _echo_json(preview_request.request_body())
+
+            preview = await client.orders.preview(account_id_key, preview_request)
+            typer.echo("Preview response:")
+            _echo_preview_order(preview)
+            preview_ids = _preview_ids(preview)
+            if not preview_ids:
+                typer.echo("No preview IDs were returned; skipping placement.")
+                return
+
+            if not _confirm_live_action("place this order", settings):
+                typer.echo("Order placement skipped.")
+                return
+
+            place_request = builder.build_place_request(preview_ids)
+            place = await client.orders.place(account_id_key, place_request)
+            typer.echo("Place response:")
+            _echo_place_order(place)
+            order_id = _first_order_id(place)
+            if order_id is None:
+                typer.echo("No order ID was returned; skipping change and cancel steps.")
+                return
+
+            if typer.confirm("Preview a limit/net price change for this order?", default=False):
+                new_price = _prompt_positive_decimal("New limit/net price")
+                _apply_change_price(builder, preview_request, new_price)
+                change_client_order_id = _new_demo_client_order_id()
+                builder.client_order_id(change_client_order_id)
+                typer.echo(f"Change client order ID: {change_client_order_id}")
+                change_preview_request = builder.build_change_preview_request(order_id)
+                typer.echo("Generated change preview request:")
+                _echo_json(change_preview_request.request_body())
+                change_preview = await client.orders.preview_change(
+                    account_id_key, order_id, change_preview_request
+                )
+                typer.echo("Change preview response:")
+                _echo_preview_order(change_preview)
+                change_preview_ids = _preview_ids(change_preview)
+                if change_preview_ids and _confirm_live_action("place this order change", settings):
+                    change_place = await client.orders.place_change(
+                        account_id_key,
+                        order_id,
+                        builder.build_change_place_request(change_preview_ids, order_id),
+                    )
+                    typer.echo("Change place response:")
+                    _echo_place_order(change_place)
+                    changed_order_id = _first_order_id(change_place)
+                    if changed_order_id is not None:
+                        order_id = changed_order_id
+                        typer.echo(f"Current order ID: {order_id}")
+                elif not change_preview_ids:
+                    typer.echo("No change preview IDs were returned; skipping change placement.")
+                else:
+                    typer.echo("Order change placement skipped.")
+
+            if typer.confirm("Cancel this order?", default=False):
+                if _confirm_live_action("cancel this order", settings):
+                    cancel = await client.orders.cancel(account_id_key, order_id)
+                    typer.echo("Cancel response:")
+                    _echo_cancel_order(cancel)
+                else:
+                    typer.echo("Order cancellation skipped.")
+
+    _handle(command())
+
+
 @market_app.command("quote")
 def market_quote(
     symbol: str = typer.Argument(..., help="Equity, index, mutual fund, or option symbol."),
@@ -559,6 +650,237 @@ def market_option_chain(
     _handle(command())
 
 
+def _prompt_account(response: AccountListResponse) -> Account:
+    accounts = response.accounts
+    if not accounts:
+        typer.echo("No accounts found.")
+        raise typer.Exit(code=1)
+    choices = [(_account_label(account), account) for account in accounts]
+    return _prompt_menu("Select account", choices)
+
+
+def _account_label(account: Account) -> str:
+    label = account.account_name or account.account_desc or "Account"
+    pieces = [label]
+    if account.account_type is not None:
+        pieces.append(account.account_type)
+    pieces.append(f"accountId {_mask_account_id(account.account_id)}")
+    pieces.append(f"accountIdKey {account.account_id_key}")
+    return " | ".join(pieces)
+
+
+def _mask_account_id(account_id: str) -> str:
+    if len(account_id) <= 4:
+        return "*" * len(account_id)
+    return "*" * (len(account_id) - 4) + account_id[-4:]
+
+
+def _prompt_order_scenario() -> str:
+    return _prompt_menu(
+        "Select order scenario",
+        [
+            ("Equity limit order", "equity"),
+            ("Single-leg option order", "single-option"),
+            ("Vertical call spread", "vertical"),
+            ("Three-leg call spread + short put", "three-leg"),
+            ("Iron condor", "iron-condor"),
+            ("Buy-write", "buy-write"),
+        ],
+    )
+
+
+def _build_demo_order(account_id_key: str, scenario: str) -> OrderBuilder:
+    builder = OrderBuilder.for_account(account_id_key).client_order_id(_prompt_client_order_id())
+    if scenario == "equity":
+        return builder.equity_limit(
+            _prompt_symbol(),
+            action=_prompt_menu(
+                "Equity action",
+                [
+                    ("Buy", "BUY"),
+                    ("Sell", "SELL"),
+                    ("Sell short", "SELL_SHORT"),
+                    ("Buy to cover", "BUY_TO_COVER"),
+                ],
+            ),
+            quantity=_prompt_positive_decimal("Quantity", "1"),
+            limit_price=_prompt_positive_decimal("Limit price"),
+        )
+    if scenario == "single-option":
+        symbol = _prompt_symbol()
+        expiration = _prompt_expiration()
+        strike = _prompt_positive_decimal("Strike price")
+        quantity = _prompt_positive_decimal("Contracts", "1")
+        limit_price = _prompt_positive_decimal("Limit price")
+        option_action = _prompt_menu(
+            "Option action",
+            [
+                ("Long call", "long-call"),
+                ("Short call", "short-call"),
+                ("Long put", "long-put"),
+                ("Short put", "short-put"),
+            ],
+        )
+        builder.order_type("OPTN").with_symbol(symbol).with_expiration(expiration).limit_price(
+            limit_price
+        )
+        if option_action == "long-call":
+            return builder.add_long_call(strike, quantity)
+        if option_action == "short-call":
+            return builder.add_short_call(strike, quantity)
+        if option_action == "long-put":
+            return builder.add_long_put(strike, quantity)
+        return builder.add_short_put(strike, quantity)
+    if scenario == "vertical":
+        return builder.option_vertical_call(
+            _prompt_symbol(),
+            expiration=_prompt_expiration(),
+            quantity=_prompt_positive_decimal("Contracts", "1"),
+            long_strike=_prompt_positive_decimal("Long call strike"),
+            short_strike=_prompt_positive_decimal("Short call strike"),
+            net_debit=_prompt_positive_decimal("Net debit"),
+        )
+    if scenario == "three-leg":
+        return builder.three_leg_call_spread_short_put(
+            _prompt_symbol(),
+            expiration=_prompt_expiration(),
+            quantity=_prompt_positive_decimal("Contracts", "1"),
+            long_call_strike=_prompt_positive_decimal("Long call strike"),
+            short_call_strike=_prompt_positive_decimal("Short call strike"),
+            short_put_strike=_prompt_positive_decimal("Short put strike"),
+            net_debit=_prompt_positive_decimal("Net debit"),
+        )
+    if scenario == "iron-condor":
+        return builder.iron_condor(
+            _prompt_symbol(),
+            expiration=_prompt_expiration(),
+            quantity=_prompt_positive_decimal("Contracts", "1"),
+            short_put_strike=_prompt_positive_decimal("Short put strike"),
+            long_put_strike=_prompt_positive_decimal("Long put strike"),
+            short_call_strike=_prompt_positive_decimal("Short call strike"),
+            long_call_strike=_prompt_positive_decimal("Long call strike"),
+            net_credit=_prompt_positive_decimal("Net credit"),
+        )
+    if scenario == "buy-write":
+        return builder.buy_write(
+            _prompt_symbol(),
+            expiration=_prompt_expiration(),
+            stock_quantity=_prompt_positive_decimal("Stock quantity", "100"),
+            call_quantity=_prompt_positive_decimal("Call contracts", "1"),
+            call_strike=_prompt_positive_decimal("Call strike"),
+            net_debit=_prompt_positive_decimal("Net debit"),
+        )
+    raise typer.BadParameter("Unknown order scenario")
+
+
+def _prompt_client_order_id() -> str:
+    default = _new_demo_client_order_id()
+    while True:
+        value = _prompt_nonempty("Client order ID", default=default)
+        if value.isalnum() and len(value) <= 20:
+            return value
+        typer.echo("Client order ID must be 1-20 alphanumeric characters.")
+
+
+def _new_demo_client_order_id() -> str:
+    return f"epdemo{uuid4().hex[:8]}"
+
+
+def _prompt_symbol() -> str:
+    return _prompt_nonempty("Symbol").upper()
+
+
+def _prompt_expiration() -> date:
+    return date(
+        _prompt_int("Expiration year"),
+        _prompt_int("Expiration month", minimum=1, maximum=12),
+        _prompt_int("Expiration day", minimum=1, maximum=31),
+    )
+
+
+def _prompt_menu(title: str, choices: list[tuple[str, TChoice]]) -> TChoice:
+    typer.echo(title)
+    for index, (label, _) in enumerate(choices, start=1):
+        typer.echo(f"  {index}. {label}")
+    while True:
+        selected = typer.prompt("Choice")
+        try:
+            index = int(selected)
+        except ValueError:
+            typer.echo("Enter a numbered choice.")
+            continue
+        if 1 <= index <= len(choices):
+            return choices[index - 1][1]
+        typer.echo("Enter a numbered choice from the menu.")
+
+
+def _prompt_nonempty(label: str, default: str | None = None) -> str:
+    while True:
+        value = typer.prompt(label, default=default).strip()
+        if value:
+            return value
+        typer.echo(f"{label} is required.")
+
+
+def _prompt_int(label: str, minimum: int | None = None, maximum: int | None = None) -> int:
+    while True:
+        raw = typer.prompt(label).strip()
+        try:
+            value = int(raw)
+        except ValueError:
+            typer.echo(f"{label} must be an integer.")
+            continue
+        if minimum is not None and value < minimum:
+            typer.echo(f"{label} must be at least {minimum}.")
+            continue
+        if maximum is not None and value > maximum:
+            typer.echo(f"{label} must be at most {maximum}.")
+            continue
+        return value
+
+
+def _prompt_positive_decimal(label: str, default: str | None = None) -> Decimal:
+    while True:
+        raw = typer.prompt(label, default=default).strip()
+        try:
+            value = Decimal(raw)
+        except InvalidOperation:
+            typer.echo(f"{label} must be a decimal number.")
+            continue
+        if value <= 0:
+            typer.echo(f"{label} must be greater than zero.")
+            continue
+        return value
+
+
+def _preview_ids(response: PreviewOrderResponse) -> list[int]:
+    return [item.preview_id for item in response.preview_ids]
+
+
+def _first_order_id(response: PlaceOrderResponse) -> int | None:
+    if not response.order_ids:
+        return None
+    return response.order_ids[0].order_id
+
+
+def _apply_change_price(
+    builder: OrderBuilder, preview_request: PreviewOrderRequest, new_price: Decimal
+) -> None:
+    price_type = preview_request.orders[0].price_type if preview_request.orders else "LIMIT"
+    if price_type == "NET_CREDIT":
+        builder.net_credit(new_price)
+    elif price_type == "NET_DEBIT":
+        builder.net_debit(new_price)
+    else:
+        builder.limit_price(new_price)
+
+
+def _confirm_live_action(action: str, settings: ETradeSettings) -> bool:
+    if settings.environment.value == "production":
+        typer.echo("Production environment: this action affects a real brokerage account.")
+    return typer.confirm(f"Confirm that you want to {action}?", default=False)
+
+
 def _load_model_file(path: Path, model_type: type[TModel], envelope: str) -> TModel:
     try:
         payload: Any = json.loads(path.read_text(encoding="utf-8"))
@@ -580,8 +902,11 @@ def _require_live_order_confirmation(confirmed: bool) -> None:
         raise typer.Exit(code=1)
 
 
-def _echo_json(model: BaseModel) -> None:
-    typer.echo(model.model_dump_json(by_alias=True, exclude_none=True, indent=2))
+def _echo_json(value: BaseModel | dict[str, Any]) -> None:
+    if isinstance(value, BaseModel):
+        typer.echo(value.model_dump_json(by_alias=True, exclude_none=True, indent=2))
+        return
+    typer.echo(json.dumps(value, indent=2))
 
 
 def _echo_account_list(response: AccountListResponse) -> None:

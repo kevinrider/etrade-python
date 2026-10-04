@@ -10,7 +10,7 @@ from etrade_python import OrderBuilder, PlaceOrderRequest, PreviewOrderRequest
 def test_equity_limit_builder_creates_preview_and_place_requests() -> None:
     builder = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-001")
+        .client_order_id("manualtest001")
         .equity_limit("aapl", action="buy", quantity=1, limit_price=Decimal("1.00"))
     )
 
@@ -21,7 +21,7 @@ def test_equity_limit_builder_creates_preview_and_place_requests() -> None:
     assert isinstance(place, PlaceOrderRequest)
     assert builder.account_id_key == "fake-account-key"
     assert preview.order_type == "EQ"
-    assert preview.client_order_id == "manual-test-001"
+    assert preview.client_order_id == "manualtest001"
     assert preview.orders[0].price_type == "LIMIT"
     assert preview.orders[0].limit_price == Decimal("1.00")
     assert preview.orders[0].instruments[0].product.symbol == "AAPL"
@@ -33,7 +33,7 @@ def test_equity_limit_builder_creates_preview_and_place_requests() -> None:
 def test_long_call_limit_builder_creates_option_leg() -> None:
     preview = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-002")
+        .client_order_id("manualtest002")
         .long_call_limit(
             "spy",
             expiration=date(2026, 10, 16),
@@ -59,7 +59,7 @@ def test_long_call_limit_builder_creates_option_leg() -> None:
 def test_vertical_call_builder_creates_two_spread_legs() -> None:
     preview = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-003")
+        .client_order_id("manualtest003")
         .option_vertical_call(
             "SPY",
             expiration=date(2026, 10, 16),
@@ -85,7 +85,7 @@ def test_vertical_call_builder_creates_two_spread_legs() -> None:
 def test_three_leg_builder_creates_call_spread_and_short_put() -> None:
     preview = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-004")
+        .client_order_id("manualtest004")
         .three_leg_call_spread_short_put(
             "SPY",
             expiration=date(2026, 10, 16),
@@ -111,7 +111,7 @@ def test_three_leg_builder_creates_call_spread_and_short_put() -> None:
 def test_iron_condor_builder_creates_four_credit_spread_legs() -> None:
     preview = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-005")
+        .client_order_id("manualtest005")
         .iron_condor(
             "SPY",
             expiration=date(2026, 10, 16),
@@ -145,7 +145,7 @@ def test_iron_condor_builder_creates_four_credit_spread_legs() -> None:
 def test_buy_write_builder_creates_stock_and_covered_call_legs() -> None:
     preview = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-006")
+        .client_order_id("manualtest006")
         .buy_write(
             "SPY",
             expiration=date(2026, 10, 16),
@@ -168,7 +168,7 @@ def test_buy_write_builder_creates_stock_and_covered_call_legs() -> None:
 def test_builder_can_build_change_requests() -> None:
     builder = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-007")
+        .client_order_id("manualtest007")
         .equity_limit("AAPL", action="BUY", quantity=1, limit_price="1.00")
     )
 
@@ -176,7 +176,7 @@ def test_builder_can_build_change_requests() -> None:
     place = builder.build_change_place_request([{"previewId": 123}], order_id=456)
 
     assert builder.order_id_value == 456
-    assert preview.client_order_id == "manual-test-007"
+    assert preview.client_order_id == "manualtest007"
     assert place.preview_ids[0].preview_id == 123
 
 
@@ -192,7 +192,7 @@ def test_builder_validates_required_state() -> None:
     with pytest.raises(ValueError, match="expiration"):
         (
             OrderBuilder.for_account("fake-account-key")
-            .client_order_id("manual-test-008")
+            .client_order_id("manualtest008")
             .order_type("OPTN")
             .with_symbol("SPY")
             .limit("1.00")
@@ -202,7 +202,7 @@ def test_builder_validates_required_state() -> None:
     with pytest.raises(ValueError, match="preview ID"):
         (
             OrderBuilder.for_account("fake-account-key")
-            .client_order_id("manual-test-009")
+            .client_order_id("manualtest009")
             .equity_limit("AAPL", action="BUY", quantity=1, limit_price="1.00")
             .build_place_request([])
         )
@@ -210,7 +210,7 @@ def test_builder_validates_required_state() -> None:
     with pytest.raises(ValueError, match="positive"):
         (
             OrderBuilder.for_account("fake-account-key")
-            .client_order_id("manual-test-010")
+            .client_order_id("manualtest010")
             .equity_limit("AAPL", action="BUY", quantity=0, limit_price="1.00")
         )
 
@@ -218,7 +218,7 @@ def test_builder_validates_required_state() -> None:
 def test_builder_low_level_fluent_methods() -> None:
     market_preview = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-011")
+        .client_order_id("manualtest011")
         .order_type("EQ")
         .with_symbol("MSFT")
         .quantity_type("quantity")
@@ -241,7 +241,7 @@ def test_builder_low_level_fluent_methods() -> None:
 
     stop_preview = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-012")
+        .client_order_id("manualtest012")
         .order_type("EQ")
         .with_symbol("MSFT")
         .stop("90")
@@ -253,7 +253,7 @@ def test_builder_low_level_fluent_methods() -> None:
 
     stop_limit_preview = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-013")
+        .client_order_id("manualtest013")
         .order_type("EQ")
         .with_symbol("MSFT")
         .stop_limit("90", "89")
@@ -289,7 +289,7 @@ def test_builder_validates_missing_preview_state(builder: OrderBuilder, message:
 def test_builder_validates_change_order_ids() -> None:
     builder = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-014")
+        .client_order_id("manualtest014")
         .equity_limit("AAPL", action="BUY", quantity=1, limit_price="1.00")
     )
 
@@ -304,7 +304,7 @@ def test_builder_validates_change_order_ids() -> None:
 def test_builder_validates_preview_id_shapes() -> None:
     builder = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-015")
+        .client_order_id("manualtest015")
         .equity_limit("AAPL", action="BUY", quantity=1, limit_price="1.00")
     )
 
@@ -322,7 +322,7 @@ def test_builder_validates_symbols_and_decimal_values() -> None:
     with pytest.raises(ValueError, match="symbol"):
         (
             OrderBuilder.for_account("fake-account-key")
-            .client_order_id("manual-test-016")
+            .client_order_id("manualtest016")
             .order_type("EQ")
             .limit("1.00")
             .add_equity("BUY", 1)
@@ -331,14 +331,14 @@ def test_builder_validates_symbols_and_decimal_values() -> None:
     with pytest.raises(ValueError, match="decimal"):
         (
             OrderBuilder.for_account("fake-account-key")
-            .client_order_id("manual-test-017")
+            .client_order_id("manualtest017")
             .equity_limit("AAPL", action="BUY", quantity=1, limit_price="not-a-number")
         )
 
     with pytest.raises(ValueError, match="finite"):
         (
             OrderBuilder.for_account("fake-account-key")
-            .client_order_id("manual-test-018")
+            .client_order_id("manualtest018")
             .equity_limit("AAPL", action="BUY", quantity=1, limit_price="NaN")
         )
 
@@ -346,7 +346,7 @@ def test_builder_validates_symbols_and_decimal_values() -> None:
 def test_builder_generic_aliases_and_request_body_shape() -> None:
     builder = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-019")
+        .client_order_id("manualtest019")
         .order_id(789)
         .order_type("eq")
         .with_symbol("aapl")
@@ -377,7 +377,7 @@ def test_builder_generic_aliases_and_request_body_shape() -> None:
 def test_builder_with_detail_add_instrument_and_disclosure() -> None:
     request = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-020")
+        .client_order_id("manualtest020")
         .order_type("EQ")
         .price_type("LIMIT")
         .term("GOOD_FOR_DAY")
@@ -419,7 +419,7 @@ def test_builder_with_detail_add_instrument_and_disclosure() -> None:
 def test_builder_option_overrides_match_expected_payload() -> None:
     request = (
         OrderBuilder.for_account("fake-account-key")
-        .client_order_id("manual-test-021")
+        .client_order_id("manualtest021")
         .order_type("SPREADS")
         .with_symbol("SPY")
         .net_credit("1.25")
@@ -496,7 +496,7 @@ def test_builder_validates_expiry_and_override_shapes() -> None:
     with pytest.raises(ValueError, match="expiry date"):
         (
             OrderBuilder.for_account("fake-account-key")
-            .client_order_id("manual-test-022")
+            .client_order_id("manualtest022")
             .order_type("OPTN")
             .with_symbol("SPY")
             .limit_price("1")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, cast
@@ -9,6 +10,8 @@ from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from etrade_python._dates import parse_broker_datetime
+
+_CLIENT_ORDER_ID_RE = re.compile(r"^[A-Za-z0-9]{1,20}$")
 
 
 class BrokerModel(BaseModel):
@@ -527,10 +530,11 @@ class PreviewOrderRequest(BaseModel):
 
     @field_validator("client_order_id")
     @classmethod
-    def nonempty_client_order_id(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("A nonempty value is required")
-        return value.strip()
+    def valid_client_order_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not _CLIENT_ORDER_ID_RE.fullmatch(normalized):
+            raise ValueError("client_order_id must be 1-20 alphanumeric characters")
+        return normalized
 
     @field_validator("orders", mode="before")
     @classmethod
