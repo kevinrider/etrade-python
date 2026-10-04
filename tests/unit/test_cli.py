@@ -1,4 +1,5 @@
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from pydantic import SecretStr
@@ -9,13 +10,20 @@ from etrade_python import (
     AccountBalanceRequest,
     AccountBalanceResponse,
     AccountListResponse,
+    CancelOrderResponse,
     ETradeValidationError,
     OptionChainRequest,
     OptionChainResponse,
     OptionExpirationsRequest,
     OptionExpirationsResponse,
+    OrdersRequest,
+    OrdersResponse,
+    PlaceOrderRequest,
+    PlaceOrderResponse,
     PortfolioRequest,
     PortfolioResponse,
+    PreviewOrderRequest,
+    PreviewOrderResponse,
     ProductLookupResponse,
     Quote,
     QuotesRequest,
@@ -270,6 +278,86 @@ class FakeMarket:
         )
 
 
+class FakeOrders:
+    def __init__(self, client: "FakeClient") -> None:
+        self._client = client
+
+    async def list(
+        self, account_id_key: str, request: OrdersRequest | None = None
+    ) -> OrdersResponse:
+        self._client.orders_account_id_key = account_id_key
+        self._client.orders_request = request
+        if self._client.profile == "empty-orders":
+            return OrdersResponse(order=[])
+        return OrdersResponse.model_validate(
+            {
+                "Order": {
+                    "orderId": 96,
+                    "orderType": "EQ",
+                    "totalOrderValue": Decimal("100.00"),
+                    "OrderDetail": {
+                        "status": "OPEN",
+                        "priceType": "LIMIT",
+                        "orderTerm": "GOOD_FOR_DAY",
+                        "Instrument": {
+                            "Product": {"symbol": "AAPL", "securityType": "EQ"},
+                            "orderAction": "BUY",
+                            "quantity": Decimal("1"),
+                        },
+                    },
+                }
+            }
+        )
+
+    async def preview(
+        self, account_id_key: str, request: PreviewOrderRequest
+    ) -> PreviewOrderResponse:
+        self._client.order_preview_account_id_key = account_id_key
+        self._client.order_preview_request = request
+        return PreviewOrderResponse.model_validate(
+            {
+                "orderType": "EQ",
+                "totalOrderValue": Decimal("100.00"),
+                "PreviewIds": {"previewId": 123},
+                "Order": {"priceType": "LIMIT", "limitPrice": Decimal("100.00")},
+            }
+        )
+
+    async def place(self, account_id_key: str, request: PlaceOrderRequest) -> PlaceOrderResponse:
+        self._client.order_place_account_id_key = account_id_key
+        self._client.order_place_request = request
+        return PlaceOrderResponse.model_validate(
+            {"orderType": "EQ", "OrderIds": {"orderId": 456}, "Order": {"priceType": "LIMIT"}}
+        )
+
+    async def preview_change(
+        self, account_id_key: str, order_id: int, request: PreviewOrderRequest
+    ) -> PreviewOrderResponse:
+        self._client.order_preview_change_account_id_key = account_id_key
+        self._client.order_preview_change_order_id = order_id
+        self._client.order_preview_change_request = request
+        return await self.preview(account_id_key, request)
+
+    async def place_change(
+        self, account_id_key: str, order_id: int, request: PlaceOrderRequest
+    ) -> PlaceOrderResponse:
+        self._client.order_place_change_account_id_key = account_id_key
+        self._client.order_place_change_order_id = order_id
+        self._client.order_place_change_request = request
+        return await self.place(account_id_key, request)
+
+    async def cancel(self, account_id_key: str, order_id: int) -> CancelOrderResponse:
+        self._client.order_cancel_account_id_key = account_id_key
+        self._client.order_cancel_order_id = order_id
+        return CancelOrderResponse.model_validate(
+            {
+                "accountId": "123456",
+                "orderId": order_id,
+                "Messages": {"Message": {"description": "Cancel requested", "code": 5011}},
+            }
+        )
+
+
 class FakeClient:
     instances: list["FakeClient"] = []
 
@@ -280,6 +368,7 @@ class FakeClient:
         self.portfolio = FakePortfolio(self)
         self.transactions = FakeTransactions(self)
         self.market = FakeMarket(self)
+        self.orders = FakeOrders(self)
         self.profile = profile
         self.balance_account_id_key: str | None = None
         self.balance_request: AccountBalanceRequest | None = None
@@ -299,6 +388,20 @@ class FakeClient:
         self.market_option_expirations_request: OptionExpirationsRequest | None = None
         self.market_option_chain_symbol: str | None = None
         self.market_option_chain_request: OptionChainRequest | None = None
+        self.orders_account_id_key: str | None = None
+        self.orders_request: OrdersRequest | None = None
+        self.order_preview_account_id_key: str | None = None
+        self.order_preview_request: PreviewOrderRequest | None = None
+        self.order_place_account_id_key: str | None = None
+        self.order_place_request: PlaceOrderRequest | None = None
+        self.order_preview_change_account_id_key: str | None = None
+        self.order_preview_change_order_id: int | None = None
+        self.order_preview_change_request: PreviewOrderRequest | None = None
+        self.order_place_change_account_id_key: str | None = None
+        self.order_place_change_order_id: int | None = None
+        self.order_place_change_request: PlaceOrderRequest | None = None
+        self.order_cancel_account_id_key: str | None = None
+        self.order_cancel_order_id: int | None = None
         self.__class__.instances.append(self)
 
     async def __aenter__(self) -> "FakeClient":
@@ -652,3 +755,212 @@ def test_market_option_chain_human_output(monkeypatch: pytest.MonkeyPatch) -> No
         chain_type="CALLPUT",
         include_weekly=True,
     )
+
+
+def _write_preview_order_file(tmp_path: Path) -> str:
+    path = tmp_path / "preview.json"
+    path.write_text(
+        '{"PreviewOrderRequest":{"orderType":"EQ","clientOrderId":"abc123","Order":[{"priceType":"LIMIT","orderTerm":"GOOD_FOR_DAY","limitPrice":"100","Instrument":[{"Product":{"symbol":"AAPL","securityType":"EQ"},"orderAction":"BUY","quantity":"1"}]}]}}'
+    )
+    return str(path)
+
+
+def _write_place_order_file(tmp_path: Path) -> str:
+    path = tmp_path / "place.json"
+    path.write_text(
+        '{"PlaceOrderRequest":{"orderType":"EQ","clientOrderId":"abc123","PreviewIds":[{"previewId":123}],"Order":[{"priceType":"LIMIT","orderTerm":"GOOD_FOR_DAY","limitPrice":"100","Instrument":[{"Product":{"symbol":"AAPL","securityType":"EQ"},"orderAction":"BUY","quantity":"1"}]}]}}'
+    )
+    return str(path)
+
+
+def test_orders_list_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app, ["orders", "list", "fake-account-key", "--count", "10", "--status", "OPEN"]
+    )
+
+    assert result.exit_code == 0
+    assert "Order ID: 96" in result.output
+    assert "Symbol: AAPL" in result.output
+    client = FakeClient.instances[0]
+    assert client.orders_account_id_key == "fake-account-key"
+    assert client.orders_request == OrdersRequest(count=10, status="OPEN")
+
+
+def test_orders_preview_reads_request_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    path = _write_preview_order_file(tmp_path)
+
+    result = runner.invoke(app, ["orders", "preview", "fake-account-key", path])
+
+    assert result.exit_code == 0
+    assert "Preview IDs: 123" in result.output
+    client = FakeClient.instances[0]
+    assert client.order_preview_account_id_key == "fake-account-key"
+    assert client.order_preview_request is not None
+    assert client.order_preview_request.client_order_id == "abc123"
+
+
+def test_orders_place_requires_confirmation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    path = _write_place_order_file(tmp_path)
+
+    result = runner.invoke(app, ["orders", "place", "fake-account-key", path])
+
+    assert result.exit_code == 1
+    assert "require --confirm-live-order" in result.output
+    assert FakeClient.instances == []
+
+
+def test_orders_place_with_confirmation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    path = _write_place_order_file(tmp_path)
+
+    result = runner.invoke(
+        app, ["orders", "place", "fake-account-key", path, "--confirm-live-order"]
+    )
+
+    assert result.exit_code == 0
+    assert "Order IDs: 456" in result.output
+    client = FakeClient.instances[0]
+    assert client.order_place_account_id_key == "fake-account-key"
+    assert client.order_place_request is not None
+    assert client.order_place_request.preview_ids[0].preview_id == 123
+
+
+def test_orders_cancel_requires_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["orders", "cancel", "fake-account-key", "456"])
+
+    assert result.exit_code == 1
+    assert "require --confirm-live-order" in result.output
+    assert FakeClient.instances == []
+
+
+def test_orders_cancel_with_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app, ["orders", "cancel", "fake-account-key", "456", "--confirm-live-order"]
+    )
+
+    assert result.exit_code == 0
+    assert "Cancel requested" in result.output
+    client = FakeClient.instances[0]
+    assert client.order_cancel_account_id_key == "fake-account-key"
+    assert client.order_cancel_order_id == 456
+
+
+def test_orders_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["orders", "list", "fake-account-key", "--json"])
+
+    assert result.exit_code == 0
+    assert '"orderId": 96' in result.output
+    assert '"symbol": "AAPL"' in result.output
+
+
+def test_orders_list_empty_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["orders", "list", "fake-account-key", "--profile", "empty-orders"])
+
+    assert result.exit_code == 0
+    assert "No orders found." in result.output
+
+
+def test_orders_preview_json_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    path = _write_preview_order_file(tmp_path)
+
+    result = runner.invoke(app, ["orders", "preview", "fake-account-key", path, "--json"])
+
+    assert result.exit_code == 0
+    assert '"previewId": 123' in result.output
+    assert '"totalOrderValue": "100.00"' in result.output
+
+
+def test_orders_preview_change_reads_request_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    path = _write_preview_order_file(tmp_path)
+
+    result = runner.invoke(app, ["orders", "preview-change", "fake-account-key", "456", path])
+
+    assert result.exit_code == 0
+    client = FakeClient.instances[0]
+    assert client.order_preview_change_account_id_key == "fake-account-key"
+    assert client.order_preview_change_order_id == 456
+    assert client.order_preview_change_request is not None
+
+
+def test_orders_place_change_with_confirmation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    path = _write_place_order_file(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "orders",
+            "place-change",
+            "fake-account-key",
+            "456",
+            path,
+            "--confirm-live-order",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert '"orderId": 456' in result.output
+    client = FakeClient.instances[0]
+    assert client.order_place_change_account_id_key == "fake-account-key"
+    assert client.order_place_change_order_id == 456
+    assert client.order_place_change_request is not None
+
+
+def test_orders_place_change_requires_confirmation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    path = _write_place_order_file(tmp_path)
+
+    result = runner.invoke(app, ["orders", "place-change", "fake-account-key", "456", path])
+
+    assert result.exit_code == 1
+    assert "require --confirm-live-order" in result.output
+    assert FakeClient.instances == []
+
+
+def test_orders_invalid_request_file_exits_cleanly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    path = tmp_path / "bad.json"
+    path.write_text("not-json")
+
+    result = runner.invoke(app, ["orders", "preview", "fake-account-key", str(path)])
+
+    assert result.exit_code != 0
+    assert FakeClient.instances == []

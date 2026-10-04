@@ -253,7 +253,7 @@ async def test_transactions_204_is_empty(settings: ETradeSettings, auth: FakeAut
     assert response.transactions == []
 
 
-async def test_transactions_iter_all_follows_page_markers(
+async def test_transactions_list_all_follows_page_markers(
     settings: ETradeSettings, auth: FakeAuthenticator
 ) -> None:
     calls: list[httpx.Request] = []
@@ -281,7 +281,7 @@ async def test_transactions_iter_all_follows_page_markers(
     ) as transport:
         transactions = [
             transaction
-            async for transaction in TransactionsService(transport).iter_all(
+            async for transaction in TransactionsService(transport).list_all(
                 "fake-key", TransactionsRequest(count=1)
             )
         ]
