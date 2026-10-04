@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -13,7 +14,12 @@ from etrade_python import (
     AccountBalanceRequest,
     AccountBalanceResponse,
     AccountListResponse,
+    AlertDetailsRequest,
+    AlertDetailsResponse,
+    AlertsRequest,
+    AlertsResponse,
     CancelOrderResponse,
+    DeleteAlertsResponse,
     ETradeValidationError,
     OptionChainRequest,
     OptionChainResponse,
@@ -395,6 +401,56 @@ class FakeOrders:
         )
 
 
+class FakeAlerts:
+    def __init__(self, client: "FakeClient") -> None:
+        self._client = client
+
+    async def list(self, request: AlertsRequest | None = None) -> AlertsResponse:
+        self._client.alerts_request = request
+        if self._client.profile == "empty-alerts":
+            return AlertsResponse(totalAlerts=0, alerts=[])
+        return AlertsResponse.model_validate(
+            {
+                "totalAlerts": 2,
+                "Alert": [
+                    {
+                        "id": 6774,
+                        "createTime": 1529426402,
+                        "subject": "Transfer failed-Insufficient Funds",
+                        "status": "UNREAD",
+                    },
+                    {
+                        "id": 6773,
+                        "createTime": 1529416825,
+                        "subject": "AAPL down by at least 2.00%",
+                        "status": "UNREAD",
+                    },
+                ],
+            }
+        )
+
+    async def get(
+        self, alert_id: int, request: AlertDetailsRequest | None = None
+    ) -> AlertDetailsResponse:
+        self._client.alert_id = alert_id
+        self._client.alert_details_request = request
+        return AlertDetailsResponse.model_validate(
+            {
+                "id": alert_id,
+                "createTime": 1529416825,
+                "subject": "AAPL down by at least 2.00%",
+                "symbol": "AAPL",
+                "msgText": "APPLE INC COM (AAPL) stock has met your target.",
+                "readTime": 0,
+                "deleteTime": 0,
+            }
+        )
+
+    async def delete(self, alert_ids: Sequence[int] | int) -> DeleteAlertsResponse:
+        self._client.alert_delete_ids = alert_ids
+        return DeleteAlertsResponse(result="SUCCESS")
+
+
 class FakeClient:
     instances: list["FakeClient"] = []
 
@@ -404,6 +460,7 @@ class FakeClient:
         self.accounts = FakeAccounts(self)
         self.portfolio = FakePortfolio(self)
         self.transactions = FakeTransactions(self)
+        self.alerts = FakeAlerts(self)
         self.market = FakeMarket(self)
         self.orders = FakeOrders(self)
         self.profile = profile
@@ -416,6 +473,10 @@ class FakeClient:
         self.transaction_detail_account_id_key: str | None = None
         self.transaction_id: str | None = None
         self.transaction_details_request: TransactionDetailsRequest | None = None
+        self.alerts_request: AlertsRequest | None = None
+        self.alert_id: int | None = None
+        self.alert_details_request: AlertDetailsRequest | None = None
+        self.alert_delete_ids: Sequence[int] | int | None = None
         self.market_quote_symbol: str | None = None
         self.market_quote_request: QuotesRequest | None = None
         self.market_quotes_symbols: list[str] | None = None
@@ -669,6 +730,94 @@ def test_transaction_get_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 0
     assert '"transactionId": "99"' in result.output
     assert '"symbol": "MSFT"' in result.output
+
+
+def test_alerts_list_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        [
+            "alerts",
+            "list",
+            "--count",
+            "10",
+            "--category",
+            "stock",
+            "--status",
+            "unread",
+            "--direction",
+            "desc",
+            "--search",
+            "AAPL",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Total alerts: 2" in result.output
+    assert "Transfer failed-Insufficient Funds" in result.output
+    client = FakeClient.instances[0]
+    assert client.alerts_request == AlertsRequest(
+        count=10, category="STOCK", status="UNREAD", direction="DESC", search="AAPL"
+    )
+
+
+def test_alerts_list_empty_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["alerts", "list", "--profile", "empty-alerts"])
+
+    assert result.exit_code == 0
+    assert "No alerts found." in result.output
+
+
+def test_alerts_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["alerts", "list", "--json"])
+
+    assert result.exit_code == 0
+    assert '"totalAlerts": 2' in result.output
+    assert '"subject": "AAPL down by at least 2.00%"' in result.output
+
+
+def test_alert_get_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["alerts", "get", "6773", "--html-tags"])
+
+    assert result.exit_code == 0
+    assert "AAPL down by at least 2.00%" in result.output
+    assert "Symbol: AAPL" in result.output
+    client = FakeClient.instances[0]
+    assert client.alert_id == 6773
+    assert client.alert_details_request == AlertDetailsRequest(htmlTags=True)
+
+
+def test_alert_delete_requires_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["alerts", "delete", "6772"])
+
+    assert result.exit_code == 1
+    assert "Refusing to delete alerts without --confirm-delete." in result.output
+    assert FakeClient.instances == []
+
+
+def test_alert_delete_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(app, ["alerts", "delete", "6772", "6774", "--confirm-delete"])
+
+    assert result.exit_code == 0
+    assert "Result: SUCCESS" in result.output
+    assert FakeClient.instances[0].alert_delete_ids == [6772, 6774]
 
 
 def test_market_quote_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
