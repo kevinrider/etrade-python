@@ -792,8 +792,7 @@ async def _build_demo_order(
         )
 
     if scenario == "buy-write":
-        stock_quantity = _prompt_positive_decimal("Stock quantity", "100")
-        call_quantity = _prompt_positive_decimal("Call contracts", "1")
+        stock_quantity, call_quantity = _prompt_buy_write_quantities()
         call_strike, call = _prompt_option_contract(chain, "CALL", "Call strike")
         quote = await _get_quote(client, symbol)
         suggested = _buy_write_estimate(quote, stock_quantity, call, call_quantity)
@@ -1078,6 +1077,19 @@ def _subtract(left: Decimal | None, right: Decimal | None) -> Decimal | None:
     return left - right
 
 
+def _prompt_buy_write_quantities() -> tuple[Decimal, Decimal]:
+    while True:
+        stock_quantity = _prompt_positive_decimal("Stock quantity", "100")
+        call_quantity = _prompt_positive_decimal("Call contracts", "1")
+        if _is_covered_call_ratio(stock_quantity, call_quantity):
+            return stock_quantity, call_quantity
+        typer.echo("Buy-write quantity must be 100 shares for each short call contract.")
+
+
+def _is_covered_call_ratio(stock_quantity: Decimal, call_quantity: Decimal) -> bool:
+    return stock_quantity == call_quantity * Decimal("100")
+
+
 def _buy_write_estimate(
     quote: Quote | None,
     stock_quantity: Decimal,
@@ -1086,9 +1098,10 @@ def _buy_write_estimate(
 ) -> Decimal | None:
     stock_ask = _quote_ask(quote)
     call_bid = _contract_bid(call)
-    if stock_ask is None or call_bid is None:
+    if stock_ask is None or call_bid is None or stock_quantity <= 0:
         return None
-    return stock_ask * stock_quantity - call_bid * call_quantity * Decimal("100")
+    total_debit = stock_ask * stock_quantity - call_bid * call_quantity * Decimal("100")
+    return total_debit / stock_quantity
 
 
 def _quote_ask(quote: Quote | None) -> Decimal | None:

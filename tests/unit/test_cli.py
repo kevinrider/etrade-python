@@ -1055,6 +1055,7 @@ def test_orders_demo_quote_and_contract_helpers() -> None:
     contract_ask = _cli_private("_contract_ask")
     contract_bid = _cli_private("_contract_bid")
     quote_ask = _cli_private("_quote_ask")
+    is_covered_call_ratio = _cli_private("_is_covered_call_ratio")
     buy_write_estimate = _cli_private("_buy_write_estimate")
 
     contracts = option_contracts(chain, "CALL")
@@ -1078,9 +1079,14 @@ def test_orders_demo_quote_and_contract_helpers() -> None:
     assert (
         buy_write_estimate(None, Decimal("100"), chain.option_pairs[0].call, Decimal("1")) is None
     )
+    assert is_covered_call_ratio(Decimal("100"), Decimal("1")) is True
+    assert is_covered_call_ratio(Decimal("100"), Decimal("2")) is False
     assert buy_write_estimate(
         quote, Decimal("100"), chain.option_pairs[0].call, Decimal("1")
-    ) == Decimal("19680.00")
+    ) == Decimal("196.80")
+    assert buy_write_estimate(
+        quote, Decimal("200"), chain.option_pairs[0].call, Decimal("2")
+    ) == Decimal("196.80")
 
 
 def test_orders_demo_option_contracts_are_sorted_and_deduplicated() -> None:
@@ -1281,6 +1287,28 @@ def test_orders_demo_scenarios_preview_only(
     assert client.order_preview_request is not None
     assert client.order_preview_request.order_type == expected_order_type
     assert client.order_place_request is None
+
+
+def test_orders_demo_buy_write_reprompts_for_uncovered_ratio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n6\ndemobuywrite\nAAPL\n\n100\n2\n200\n2\n6\n\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Buy-write quantity must be 100 shares for each short call contract." in result.output
+    client = FakeClient.instances[0]
+    assert client.order_preview_request is not None
+    detail = client.order_preview_request.orders[0]
+    assert detail.limit_price == Decimal("1173.90")
+    assert detail.instruments[0].quantity == Decimal("200")
+    assert detail.instruments[1].quantity == Decimal("2")
 
 
 def test_orders_demo_reprompts_for_invalid_choices_and_values(
