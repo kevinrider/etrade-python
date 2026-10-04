@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 
@@ -174,7 +175,7 @@ def test_builder_can_build_change_requests() -> None:
     preview = builder.build_change_preview_request(order_id=456)
     place = builder.build_change_place_request([{"previewId": 123}], order_id=456)
 
-    assert builder.order_id == 456
+    assert builder.order_id_value == 456
     assert preview.client_order_id == "manual-test-007"
     assert place.preview_ids[0].preview_id == 123
 
@@ -339,4 +340,180 @@ def test_builder_validates_symbols_and_decimal_values() -> None:
             OrderBuilder.for_account("fake-account-key")
             .client_order_id("manual-test-018")
             .equity_limit("AAPL", action="BUY", quantity=1, limit_price="NaN")
+        )
+
+
+def test_builder_generic_aliases_and_request_body_shape() -> None:
+    builder = (
+        OrderBuilder.for_account("fake-account-key")
+        .client_order_id("manual-test-019")
+        .order_id(789)
+        .order_type("eq")
+        .with_symbol("aapl")
+        .with_expiry(2026, 10, 16)
+        .quantity_type("quantity")
+        .gfd()
+        .limit_price("1.23")
+        .market_session("regular")
+        .all_or_none(False)
+        .add_equity("buy", 1, overrides={"orderedQuantity": "1"})
+    )
+
+    preview_body = builder.build_preview_request().request_body()
+    place_body = builder.build_place_request([123]).request_body()
+
+    detail = preview_body["PreviewOrderRequest"]["Order"][0]
+    instrument = detail["Instrument"][0]
+    assert builder.order_id_value == 789
+    assert detail["priceType"] == "LIMIT"
+    assert detail["limitPrice"] == "1.23"
+    assert detail["allOrNone"] is False
+    assert instrument["Product"] == {"symbol": "AAPL", "securityType": "EQ"}
+    assert instrument["orderAction"] == "BUY"
+    assert instrument["orderedQuantity"] == "1"
+    assert place_body["PlaceOrderRequest"]["PreviewIds"] == [{"previewId": 123}]
+
+
+def test_builder_with_detail_add_instrument_and_disclosure() -> None:
+    request = (
+        OrderBuilder.for_account("fake-account-key")
+        .client_order_id("manual-test-020")
+        .order_type("EQ")
+        .price_type("LIMIT")
+        .term("GOOD_FOR_DAY")
+        .with_detail(
+            {
+                "limitPrice": "10.50",
+                "routingDestination": "AUTO",
+                "bracketedLimitPrice": "11.00",
+                "Instrument": [{"ignored": True}],
+            }
+        )
+        .disclosure({"ehDisclosureFlag": True, "aoDisclosureFlag": False})
+        .add_instrument(
+            {
+                "orderAction": "BUY",
+                "quantityType": "QUANTITY",
+                "quantity": "1",
+                "Product": {"symbol": "MSFT", "securityType": "EQ"},
+            }
+        )
+        .build_preview_request()
+    )
+
+    detail = request.request_body()["PreviewOrderRequest"]["Order"][0]
+    assert detail["limitPrice"] == "10.50"
+    assert detail["routingDestination"] == "AUTO"
+    assert detail["bracketedLimitPrice"] == "11.00"
+    assert detail["disclosure"] == {"ehDisclosureFlag": True, "aoDisclosureFlag": False}
+    assert detail["Instrument"] == [
+        {
+            "Product": {"symbol": "MSFT", "securityType": "EQ"},
+            "orderAction": "BUY",
+            "quantityType": "QUANTITY",
+            "quantity": "1",
+        }
+    ]
+
+
+def test_builder_option_overrides_match_expected_payload() -> None:
+    request = (
+        OrderBuilder.for_account("fake-account-key")
+        .client_order_id("manual-test-021")
+        .order_type("SPREADS")
+        .with_symbol("SPY")
+        .net_credit("1.25")
+        .add_short_put(
+            "110",
+            1,
+            overrides={
+                "symbol": "QQQ",
+                "expiryYear": 2026,
+                "expiryMonth": 11,
+                "expiryDay": 20,
+                "quantityType": "QUANTITY",
+                "orderedQuantity": "1",
+            },
+        )
+        .build_preview_request()
+    )
+
+    instrument = request.request_body()["PreviewOrderRequest"]["Order"][0]["Instrument"][0]
+    assert instrument["orderAction"] == "SELL_OPEN"
+    assert instrument["orderedQuantity"] == "1"
+    assert instrument["Product"] == {
+        "symbol": "QQQ",
+        "securityType": "OPTN",
+        "callPut": "PUT",
+        "expiryYear": 2026,
+        "expiryMonth": 11,
+        "expiryDay": 20,
+        "strikePrice": "110",
+    }
+
+
+@pytest.mark.parametrize(
+    ("action", "message"),
+    [
+        (lambda: OrderBuilder.for_account("a").order_type("BAD"), "order_type"),
+        (lambda: OrderBuilder.for_account("a").quantity_type("BAD"), "quantity_type"),
+        (lambda: OrderBuilder.for_account("a").term("BAD"), "order_term"),
+        (lambda: OrderBuilder.for_account("a").price_type("BAD"), "price_type"),
+        (lambda: OrderBuilder.for_account("a").market_session("BAD"), "market_session"),
+        (
+            lambda: (
+                OrderBuilder.for_account("a")
+                .client_order_id("x")
+                .order_type("EQ")
+                .with_symbol("AAPL")
+                .limit_price("1")
+                .add_equity("BAD")
+            ),
+            "order_action",
+        ),
+        (
+            lambda: (
+                OrderBuilder.for_account("a")
+                .client_order_id("x")
+                .order_type("EQ")
+                .with_symbol("AAPL")
+                .limit_price("1")
+                .add_equity("BUY", overrides={"securityType": "BAD"})
+            ),
+            "security_type",
+        ),
+    ],
+)
+def test_builder_validates_order_enum_sets(action: Callable[[], object], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        action()
+
+
+def test_builder_validates_expiry_and_override_shapes() -> None:
+    with pytest.raises(ValueError, match="expiry date"):
+        OrderBuilder.for_account("fake-account-key").with_expiry(2026, 2, 31)
+
+    with pytest.raises(ValueError, match="expiry date"):
+        (
+            OrderBuilder.for_account("fake-account-key")
+            .client_order_id("manual-test-022")
+            .order_type("OPTN")
+            .with_symbol("SPY")
+            .limit_price("1")
+            .add_long_call(
+                "200",
+                overrides={"expiryYear": 2026, "expiryMonth": 2, "expiryDay": 31},
+            )
+        )
+
+    with pytest.raises(ValueError, match="quantity_type"):
+        (
+            OrderBuilder.for_account("fake-account-key").add_instrument(
+                {
+                    "orderAction": "BUY",
+                    "quantityType": "BAD",
+                    "quantity": "1",
+                    "Product": {"symbol": "MSFT", "securityType": "EQ"},
+                }
+            )
         )

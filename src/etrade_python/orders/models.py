@@ -1,5 +1,7 @@
 """Typed order request and response models."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, cast
@@ -97,12 +99,13 @@ class MFQuantity(BrokerModel):
 class OrderInstrumentRequest(BaseModel):
     """Instrument request entry inside an E*TRADE order body."""
 
-    model_config = ConfigDict(frozen=True, populate_by_name=True)
+    model_config = ConfigDict(extra="allow", frozen=True, populate_by_name=True)
 
     product: OrderProduct = Field(alias="Product")
     order_action: str = Field(alias="orderAction")
     quantity_type: str | None = Field(default="QUANTITY", alias="quantityType")
     quantity: Decimal | None = None
+    ordered_quantity: Decimal | None = Field(default=None, alias="orderedQuantity")
     lots: OrderLots | None = None
     mf_quantity: MFQuantity | None = Field(default=None, alias="mfQuantity")
     osi_key: str | None = Field(default=None, alias="osiKey")
@@ -120,7 +123,7 @@ class OrderInstrumentRequest(BaseModel):
             raise ValueError("A nonempty value is required")
         return normalized
 
-    @field_validator("quantity", "reserve_quantity")
+    @field_validator("quantity", "ordered_quantity", "reserve_quantity")
     @classmethod
     def positive_quantities(cls, value: Decimal | None) -> Decimal | None:
         if value is not None and value < 0:
@@ -202,7 +205,7 @@ class Messages(BrokerModel):
 class OrderDetailRequest(BaseModel):
     """Order detail request entry inside preview/place requests."""
 
-    model_config = ConfigDict(frozen=True, populate_by_name=True)
+    model_config = ConfigDict(extra="allow", frozen=True, populate_by_name=True)
 
     all_or_none: bool | str | None = Field(default=None, alias="allOrNone")
     price_type: str = Field(alias="priceType")
@@ -214,6 +217,7 @@ class OrderDetailRequest(BaseModel):
     offset_type: str | None = Field(default=None, alias="offsetType")
     offset_value: Decimal | None = Field(default=None, alias="offsetValue")
     routing_destination: str | None = Field(default=None, alias="routingDestination")
+    disclosure: Disclosure | None = Field(default=None, alias="disclosure")
     instruments: list[OrderInstrumentRequest] = Field(alias="Instrument")
 
     @field_validator(
@@ -236,7 +240,7 @@ class OrderDetailRequest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_price_shape(self) -> "OrderDetailRequest":
+    def validate_price_shape(self) -> OrderDetailRequest:
         if not self.instruments:
             raise ValueError("At least one instrument is required")
         if self.price_type in {
@@ -536,7 +540,7 @@ class PreviewOrderRequest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_orders(self) -> "PreviewOrderRequest":
+    def validate_orders(self) -> PreviewOrderRequest:
         if not self.orders:
             raise ValueError("At least one order is required")
         return self
@@ -566,7 +570,7 @@ class PlaceOrderRequest(PreviewOrderRequest):
         return value
 
     @model_validator(mode="after")
-    def validate_preview_ids(self) -> "PlaceOrderRequest":
+    def validate_preview_ids(self) -> PlaceOrderRequest:
         if not self.preview_ids:
             raise ValueError("At least one preview ID is required")
         return self

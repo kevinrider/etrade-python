@@ -11,8 +11,7 @@ def parse_broker_datetime(value: Any) -> datetime | None:
     """Parse an E*TRADE date/time value into a timezone-aware datetime.
 
     E*TRADE responses commonly encode date/time fields as epoch milliseconds,
-    epoch seconds, or compact numeric dates. This mirrors the Carbon casting
-    behavior used by laravel-etrade for DTO properties typed as Carbon.
+    epoch seconds, compact numeric dates, or broker-specific timestamp strings.
     """
     if value is None or value == "":
         return None
