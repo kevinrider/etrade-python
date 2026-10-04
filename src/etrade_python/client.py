@@ -9,6 +9,7 @@ from etrade_python.auth.stores import CredentialStore, KeyringCredentialStore
 from etrade_python.config import ETradeSettings
 from etrade_python.exceptions import ETradeValidationError
 from etrade_python.market.service import MarketService
+from etrade_python.orders.service import OrdersService
 from etrade_python.portfolio.service import PortfolioService
 from etrade_python.transactions.service import TransactionsService
 from etrade_python.transport.auth import RequestAuthenticator
@@ -57,6 +58,7 @@ class ETradeClient:
         self.portfolio = PortfolioService(self._transport)
         self.transactions = TransactionsService(self._transport)
         self.market = MarketService(self._transport)
+        self.orders = OrdersService(self._transport)
         self._closed = False
 
     @classmethod

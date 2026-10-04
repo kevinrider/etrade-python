@@ -73,7 +73,7 @@ class TransactionsService:
         except ValidationError as error:
             raise_response_validation_error("Invalid transaction details response", error)
 
-    async def iter_all(
+    async def list_all(
         self, account_id_key: str, request: TransactionsRequest | None = None
     ) -> AsyncIterator[Transaction]:
         base_request = request or TransactionsRequest()

@@ -1,9 +1,11 @@
 """Diagnostic CLI for authentication bootstrap and read-only API checks."""
 
 import asyncio
+import json
 from collections.abc import Coroutine
 from decimal import Decimal
-from typing import Annotated, Any
+from pathlib import Path
+from typing import Annotated, Any, TypeVar, cast
 
 import typer
 from pydantic import BaseModel
@@ -12,12 +14,19 @@ from etrade_python import (
     AccountBalanceRequest,
     AccountBalanceResponse,
     AccountListResponse,
+    CancelOrderResponse,
     OptionChainRequest,
     OptionChainResponse,
     OptionExpirationsRequest,
     OptionExpirationsResponse,
+    OrdersRequest,
+    OrdersResponse,
+    PlaceOrderRequest,
+    PlaceOrderResponse,
     PortfolioRequest,
     PortfolioResponse,
+    PreviewOrderRequest,
+    PreviewOrderResponse,
     ProductLookupResponse,
     Quote,
     QuotesRequest,
@@ -33,17 +42,21 @@ from etrade_python.client import ETradeClient
 from etrade_python.config import ETradeSettings
 from etrade_python.exceptions import ETradeError
 
+TModel = TypeVar("TModel", bound=BaseModel)
+
 app = typer.Typer(no_args_is_help=True, invoke_without_command=True)
 auth_app = typer.Typer(no_args_is_help=True)
 accounts_app = typer.Typer(no_args_is_help=True)
 portfolio_app = typer.Typer(no_args_is_help=True)
 transactions_app = typer.Typer(no_args_is_help=True)
 market_app = typer.Typer(no_args_is_help=True)
+orders_app = typer.Typer(no_args_is_help=True)
 app.add_typer(auth_app, name="auth")
 app.add_typer(accounts_app, name="accounts")
 app.add_typer(portfolio_app, name="portfolio")
 app.add_typer(transactions_app, name="transactions")
 app.add_typer(market_app, name="market")
+app.add_typer(orders_app, name="orders")
 
 
 def _run(coro: Coroutine[Any, Any, object]) -> object:
@@ -253,6 +266,160 @@ def get_transaction(
     _handle(command())
 
 
+@orders_app.command("list")
+def list_orders(
+    account_id_key: str = typer.Argument(..., help="E*TRADE accountIdKey from accounts list."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    marker: str | None = typer.Option(None, "--marker"),
+    count: int | None = typer.Option(None, "--count"),
+    status: str | None = typer.Option(None, "--status"),
+    from_date: str | None = typer.Option(None, "--from-date"),
+    to_date: str | None = typer.Option(None, "--to-date"),
+    symbol: str | None = typer.Option(None, "--symbol"),
+    security_type: str | None = typer.Option(None, "--security-type"),
+    transaction_type: str | None = typer.Option(None, "--transaction-type"),
+    market_session: str | None = typer.Option(None, "--market-session"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """List orders for an accountIdKey."""
+
+    async def command() -> None:
+        request = OrdersRequest(
+            marker=marker,
+            count=count,
+            status=status,
+            fromDate=from_date,
+            toDate=to_date,
+            symbol=symbol,
+            securityType=security_type,
+            transactionType=transaction_type,
+            marketSession=market_session,
+        )
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.orders.list(account_id_key, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_orders(response)
+
+    _handle(command())
+
+
+@orders_app.command("preview")
+def preview_order(
+    account_id_key: Annotated[str, typer.Argument(help="E*TRADE accountIdKey from accounts list.")],
+    request_json: Annotated[Path, typer.Argument(help="JSON file containing PreviewOrderRequest.")],
+    profile: str = typer.Option("default", "--profile", "-p"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Preview an order request from a JSON file."""
+
+    async def command() -> None:
+        request = _load_model_file(request_json, PreviewOrderRequest, "PreviewOrderRequest")
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.orders.preview(account_id_key, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_preview_order(response)
+
+    _handle(command())
+
+
+@orders_app.command("place")
+def place_order(
+    account_id_key: Annotated[str, typer.Argument(help="E*TRADE accountIdKey from accounts list.")],
+    request_json: Annotated[Path, typer.Argument(help="JSON file containing PlaceOrderRequest.")],
+    profile: str = typer.Option("default", "--profile", "-p"),
+    confirm_live_order: bool = typer.Option(False, "--confirm-live-order"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Place a previously previewed order request from a JSON file."""
+
+    _require_live_order_confirmation(confirm_live_order)
+
+    async def command() -> None:
+        request = _load_model_file(request_json, PlaceOrderRequest, "PlaceOrderRequest")
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.orders.place(account_id_key, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_place_order(response)
+
+    _handle(command())
+
+
+@orders_app.command("preview-change")
+def preview_change_order(
+    account_id_key: Annotated[str, typer.Argument(help="E*TRADE accountIdKey from accounts list.")],
+    order_id: Annotated[int, typer.Argument(help="Order ID to change.")],
+    request_json: Annotated[Path, typer.Argument(help="JSON file containing PreviewOrderRequest.")],
+    profile: str = typer.Option("default", "--profile", "-p"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Preview a changed order request from a JSON file."""
+
+    async def command() -> None:
+        request = _load_model_file(request_json, PreviewOrderRequest, "PreviewOrderRequest")
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.orders.preview_change(account_id_key, order_id, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_preview_order(response)
+
+    _handle(command())
+
+
+@orders_app.command("place-change")
+def place_change_order(
+    account_id_key: Annotated[str, typer.Argument(help="E*TRADE accountIdKey from accounts list.")],
+    order_id: Annotated[int, typer.Argument(help="Order ID to change.")],
+    request_json: Annotated[Path, typer.Argument(help="JSON file containing PlaceOrderRequest.")],
+    profile: str = typer.Option("default", "--profile", "-p"),
+    confirm_live_order: bool = typer.Option(False, "--confirm-live-order"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Place a changed order request from a JSON file."""
+
+    _require_live_order_confirmation(confirm_live_order)
+
+    async def command() -> None:
+        request = _load_model_file(request_json, PlaceOrderRequest, "PlaceOrderRequest")
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.orders.place_change(account_id_key, order_id, request)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_place_order(response)
+
+    _handle(command())
+
+
+@orders_app.command("cancel")
+def cancel_order(
+    account_id_key: str = typer.Argument(..., help="E*TRADE accountIdKey from accounts list."),
+    order_id: int = typer.Argument(..., help="Order ID to cancel."),
+    profile: str = typer.Option("default", "--profile", "-p"),
+    confirm_live_order: bool = typer.Option(False, "--confirm-live-order"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
+) -> None:
+    """Cancel an order."""
+
+    _require_live_order_confirmation(confirm_live_order)
+
+    async def command() -> None:
+        async with ETradeClient(_settings(), profile=profile) as client:
+            response = await client.orders.cancel(account_id_key, order_id)
+            if json_output:
+                _echo_json(response)
+                return
+            _echo_cancel_order(response)
+
+    _handle(command())
+
+
 @market_app.command("quote")
 def market_quote(
     symbol: str = typer.Argument(..., help="Equity, index, mutual fund, or option symbol."),
@@ -392,6 +559,27 @@ def market_option_chain(
     _handle(command())
 
 
+def _load_model_file(path: Path, model_type: type[TModel], envelope: str) -> TModel:
+    try:
+        payload: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise typer.BadParameter("Expected a readable JSON request file") from None
+    if isinstance(payload, dict):
+        payload_mapping = cast(dict[str, Any], payload)
+        if envelope in payload_mapping:
+            payload = payload_mapping[envelope]
+    try:
+        return model_type.model_validate(payload)
+    except ValueError as exc:
+        raise typer.BadParameter("Invalid order request JSON") from exc
+
+
+def _require_live_order_confirmation(confirmed: bool) -> None:
+    if not confirmed:
+        typer.echo("Order mutation commands require --confirm-live-order.", err=True)
+        raise typer.Exit(code=1)
+
+
 def _echo_json(model: BaseModel) -> None:
     typer.echo(model.model_dump_json(by_alias=True, exclude_none=True, indent=2))
 
@@ -479,6 +667,62 @@ def _echo_transaction_details(response: TransactionDetailsResponse) -> None:
             _echo_optional("Symbol", transaction.brokerage.product.symbol)
         _echo_optional_decimal("Quantity", transaction.brokerage.quantity)
         _echo_optional_decimal("Price", transaction.brokerage.price)
+
+
+def _echo_orders(response: OrdersResponse) -> None:
+    if not response.orders:
+        typer.echo("No orders found.")
+        return
+    for order in response.orders:
+        typer.echo(f"Order ID: {order.order_id}")
+        _echo_optional("  Type", order.order_type)
+        _echo_optional_decimal("  Total value", order.total_order_value)
+        _echo_optional_decimal("  Commission", order.total_commission)
+        if order.order_details:
+            detail = order.order_details[0]
+            _echo_optional("  Status", detail.status)
+            _echo_optional("  Term", detail.order_term)
+            _echo_optional("  Price type", detail.price_type)
+            if detail.instruments and detail.instruments[0].product is not None:
+                _echo_optional("  Symbol", detail.instruments[0].product.symbol)
+
+
+def _echo_preview_order(response: PreviewOrderResponse) -> None:
+    typer.echo(response.order_type or "Preview order")
+    _echo_optional_decimal("Total order value", response.total_order_value)
+    if response.preview_ids:
+        typer.echo(
+            "Preview IDs: " + ", ".join(str(item.preview_id) for item in response.preview_ids)
+        )
+    for order in response.orders:
+        _echo_optional("Price type", order.price_type)
+        _echo_optional_decimal("Limit price", order.limit_price)
+        _echo_optional_decimal("Estimated total", order.estimated_total_amount)
+        if order.messages is not None:
+            for message in order.messages.messages:
+                _echo_optional("Message", message.description)
+
+
+def _echo_place_order(response: PlaceOrderResponse) -> None:
+    typer.echo(response.order_type or "Placed order")
+    if response.order_ids:
+        typer.echo("Order IDs: " + ", ".join(str(item.order_id) for item in response.order_ids))
+    for order in response.orders:
+        _echo_optional("Price type", order.price_type)
+        _echo_optional_decimal("Limit price", order.limit_price)
+        _echo_optional_decimal("Estimated total", order.estimated_total_amount)
+        if order.messages is not None:
+            for message in order.messages.messages:
+                _echo_optional("Message", message.description)
+
+
+def _echo_cancel_order(response: CancelOrderResponse) -> None:
+    _echo_optional("Account ID", response.account_id)
+    _echo_optional("Order ID", response.order_id)
+    _echo_optional("Cancel time", response.cancel_time)
+    if response.messages is not None:
+        for message in response.messages.messages:
+            _echo_optional("Message", message.description)
 
 
 def _echo_quote(quote: Quote) -> None:

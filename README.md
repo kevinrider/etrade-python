@@ -45,6 +45,7 @@ Implemented:
 - typed Accounts service for account list and balance endpoints
 - typed Portfolio and Transactions services for positions and transaction history
 - typed Market service for quotes, product lookup, option expirations, and option chains
+- typed Orders service for list, preview, place, change, and cancel endpoints
 - local architecture and research notes
 - offline tests for configuration, transport, OAuth, sessions, credential stores, CLI,
   accounts, retries, responses, logging, and client lifecycle
@@ -52,13 +53,12 @@ Implemented:
 
 Planned:
 
-- order preview, placement, modification, and cancellation endpoints
 - alerts endpoints
 - full endpoint-completeness review against official E*TRADE documentation
 
 ## API Coverage
 
-Inspected 2026-10-03. OAuth, Accounts, Portfolio, Transactions, and Market
+Inspected 2026-10-03. OAuth, Accounts, Portfolio, Transactions, Market, and Orders
 endpoints are implemented and covered by offline contract tests. Infrastructure
 tests do not count as endpoint coverage. Rows marked Planned describe intended
 service method/model names, not importable APIs.
@@ -83,13 +83,12 @@ suffixes are format selectors and do not create separate endpoints.
 | Done | Market | [GET /market/lookup/{search}](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.lookup_product` | ProductLookupRequest | ProductLookupResponse | Yes | Yes | 5 |
 | Done | Market | [GET /market/optionexpiredate](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_expirations` | OptionExpirationsRequest | OptionExpirationsResponse | Yes | Yes | 5 |
 | Done | Market | [GET /market/optionchains](https://apisb.etrade.com/docs/api/market/api-market-v1.html) | `market.get_option_chain` | OptionChainRequest | OptionChainResponse | Yes | Yes | 5 |
-| Planned | Orders | [GET /accounts/{accountIdKey}/orders](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.list` | OrdersRequest | OrdersPage | No | No | 6 |
-| Planned | Orders | [GET /accounts/{accountIdKey}/orders/{orderId}](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.get` | OrderDetailsRequest | Order | No | No | 6 |
-| Planned | Orders | [POST /accounts/{accountIdKey}/orders/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview` | OrderPreviewRequest | OrderPreview | No | No | 6 |
-| Planned | Orders | [POST /accounts/{accountIdKey}/orders/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place` | OrderPlacementRequest | OrderExecution | No | No | 6 |
-| Planned | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview_change` | OrderChangePreviewRequest | OrderPreview | No | No | 6 |
-| Planned | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.modify` | OrderModificationRequest | OrderExecution | No | No | 6 |
-| Planned | Orders | [PUT /accounts/{accountIdKey}/orders/cancel](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.cancel` | OrderCancellationRequest | OrderCancellation | No | No | 6 |
+| Done | Orders | [GET /accounts/{accountIdKey}/orders](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.list / list_all` | OrdersRequest | OrdersResponse | Yes | Yes | 6 |
+| Done | Orders | [POST /accounts/{accountIdKey}/orders/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview` | PreviewOrderRequest | PreviewOrderResponse | Yes | No | 6 |
+| Done | Orders | [POST /accounts/{accountIdKey}/orders/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place` | PlaceOrderRequest | PlaceOrderResponse | Yes | No | 6 |
+| Done | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/preview](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.preview_change` | PreviewOrderRequest | PreviewOrderResponse | Yes | No | 6 |
+| Done | Orders | [PUT /accounts/{accountIdKey}/orders/{orderId}/change/place](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.place_change` | PlaceOrderRequest | PlaceOrderResponse | Yes | No | 6 |
+| Done | Orders | [PUT /accounts/{accountIdKey}/orders/cancel](https://apisb.etrade.com/docs/api/order/api-order-v1.html) | `orders.cancel` | CancelOrderRequest | CancelOrderResponse | Yes | No | 6 |
 | Planned | Alerts | [GET /user/alerts](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.list` | AlertsRequest | AlertsResponse | No | No | 7 |
 | Planned | Alerts | [GET /user/alerts/{id}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.get` | AlertDetailsRequest | Alert | No | No | 7 |
 | Planned | Alerts | [DELETE /user/alerts/{alert_id_list}](https://apisb.etrade.com/docs/api/user/api-alert-v1.html) | `alerts.delete` | DeleteAlertsRequest | DeleteAlertsResponse | No | No | 7 |
@@ -131,11 +130,19 @@ read-only account, portfolio, transactions, and market data endpoints:
 .venv/bin/etrade market lookup Apple
 .venv/bin/etrade market option-expirations AAPL
 .venv/bin/etrade market option-chain AAPL --expiry-year 2026 --expiry-month 10 --expiry-day 16
+.venv/bin/etrade orders list ACCOUNT_ID_KEY
+.venv/bin/etrade orders preview ACCOUNT_ID_KEY preview-order.json
+.venv/bin/etrade orders place ACCOUNT_ID_KEY place-order.json --confirm-live-order
+.venv/bin/etrade orders preview-change ACCOUNT_ID_KEY ORDER_ID preview-order.json
+.venv/bin/etrade orders place-change ACCOUNT_ID_KEY ORDER_ID place-order.json --confirm-live-order
+.venv/bin/etrade orders cancel ACCOUNT_ID_KEY ORDER_ID --confirm-live-order
 ```
 
 The account commands display account IDs and account ID keys because they are
-needed for manual API testing. They do not print OAuth tokens, token secrets,
-consumer secrets, signatures, or verifier codes.
+needed for manual API testing. Order mutation commands require
+`--confirm-live-order` because they can affect real brokerage accounts in
+production. CLI commands do not print OAuth tokens, token secrets, consumer
+secrets, signatures, or verifier codes.
 
 ## Development Setup
 
