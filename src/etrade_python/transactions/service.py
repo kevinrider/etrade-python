@@ -82,7 +82,7 @@ class TransactionsService:
             page = await self.list(account_id_key, current_request)
             for transaction in page.transactions:
                 yield transaction
-            marker = page.page_markers
+            marker = page.marker
             if not marker or len(page.transactions) < (base_request.count or 50):
                 return
             current_request = base_request.model_copy(update={"marker": marker})

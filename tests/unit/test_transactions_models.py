@@ -9,6 +9,19 @@ from etrade_python import (
     TransactionsRequest,
     TransactionsResponse,
 )
+from tests.conftest import load_json_fixture
+
+
+def test_transactions_response_parses_continuation_fields() -> None:
+    payload = load_json_fixture("responses/transactions_response.json")["TransactionListResponse"]
+    response = TransactionsResponse.model_validate(payload)
+
+    assert response.marker == "18151100002634_1527739200"
+    assert response.next == payload["next"]
+    assert response.page_markers == payload["pageMarkers"]
+    assert response.marker != response.page_markers
+    assert "marker" not in response.broker_metadata
+    assert "next" not in response.broker_metadata
 
 
 def test_transactions_request_query_params() -> None:
@@ -27,6 +40,20 @@ def test_transactions_request_query_params() -> None:
         "endDate": "01312026",
         "sortOrder": "DESC",
     }
+
+
+def test_transactions_request_defaults_to_descending_order() -> None:
+    request = TransactionsRequest()
+
+    assert request.sort_order == "DESC"
+    assert request.query_params()["sortOrder"] == "DESC"
+
+
+@pytest.mark.parametrize("sort_order", ["ASC", None])
+def test_transactions_request_preserves_explicit_sort_order(sort_order: str | None) -> None:
+    request = TransactionsRequest(sort_order=sort_order)
+
+    assert request.query_params()["sortOrder"] == sort_order
 
 
 def test_transactions_request_requires_date_pair() -> None:

@@ -235,7 +235,7 @@ def list_transactions(
     count: int | None = typer.Option(None, "--count"),
     start_date: str | None = typer.Option(None, "--start-date"),
     end_date: str | None = typer.Option(None, "--end-date"),
-    sort_order: str | None = typer.Option(None, "--sort-order"),
+    sort_order: str = typer.Option("DESC", "--sort-order"),
     json_output: bool = typer.Option(False, "--json", help="Print the full response as JSON."),
 ) -> None:
     """List transactions for an accountIdKey."""

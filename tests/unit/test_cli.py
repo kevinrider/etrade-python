@@ -692,6 +692,24 @@ def test_transactions_list_human_output(monkeypatch: pytest.MonkeyPatch) -> None
     )
 
 
+@pytest.mark.parametrize("sort_order", [None, "ASC"])
+def test_transactions_list_cli_sort_order(
+    monkeypatch: pytest.MonkeyPatch, sort_order: str | None
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    args = ["transactions", "list", "fake-account-key"]
+    if sort_order is not None:
+        args.extend(["--sort-order", sort_order])
+
+    result = runner.invoke(app, args)
+
+    assert result.exit_code == 0
+    request = FakeClient.instances[0].transactions_request
+    assert request is not None
+    assert request.sort_order == (sort_order or "DESC")
+
+
 def test_transactions_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     set_env(monkeypatch)
     monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)

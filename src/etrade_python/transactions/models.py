@@ -32,7 +32,7 @@ class TransactionsRequest(BaseModel):
     count: int | None = Field(default=None, ge=1, le=50)
     start_date: str | None = None
     end_date: str | None = None
-    sort_order: str | None = None
+    sort_order: str | None = "DESC"
 
     @field_validator("marker", "start_date", "end_date", "sort_order")
     @classmethod
@@ -167,6 +167,8 @@ class TransactionsResponse(BrokerModel):
     transactions: list[Transaction] = Field(
         default_factory=_empty_transactions, alias="transaction"
     )
+    marker: str | None = None
+    next: str | None = None
     page_markers: str | None = Field(default=None, alias="pageMarkers")
     more_transactions: bool | str | None = Field(default=None, alias="moreTransactions")
     transaction_count: int | str | None = Field(default=None, alias="transactionCount")

@@ -65,7 +65,13 @@ async def test_transactions_list_contract(
         assert request.method == "GET"
         assert request.url.path == "/v1/accounts/fake-key/transactions.json"
         assert request.url.params == httpx.QueryParams(
-            {"marker": "50", "count": "10", "startDate": "01012026", "endDate": "01312026"}
+            {
+                "marker": "50",
+                "count": "10",
+                "startDate": "01012026",
+                "endDate": "01312026",
+                "sortOrder": "DESC",
+            }
         )
         return httpx.Response(200, json=load_json_fixture("responses/transactions_response.json"))
 
@@ -86,6 +92,25 @@ async def test_transactions_list_contract(
     assert transaction.amount == Decimal("-2")
     assert transaction.brokerage is not None
     assert transaction.brokerage.product is None
+
+
+@pytest.mark.parametrize("sort_order", ["ASC", None])
+async def test_transactions_list_preserves_explicit_sort_order(
+    settings: ETradeSettings, auth: FakeAuthenticator, sort_order: str | None
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if sort_order is None:
+            assert "sortOrder" not in request.url.params
+        else:
+            assert request.url.params["sortOrder"] == sort_order
+        return httpx.Response(204)
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        await TransactionsService(transport).list(
+            "fake-key", TransactionsRequest(sort_order=sort_order)
+        )
 
 
 async def test_transaction_details_contract(
@@ -253,26 +278,30 @@ async def test_transactions_204_is_empty(settings: ETradeSettings, auth: FakeAut
     assert response.transactions == []
 
 
-async def test_transactions_list_all_follows_page_markers(
+async def test_transactions_list_all_follows_marker_and_preserves_filters(
     settings: ETradeSettings, auth: FakeAuthenticator
 ) -> None:
     calls: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        marker = request.url.params.get("marker")
-        if marker is None:
-            transaction_id = "1"
-            page_marker = "next-marker"
-        else:
-            transaction_id = "2"
-            page_marker = None
-        payload: dict[str, object] = {
-            "Transaction": {"transactionId": transaction_id},
-        }
-        if page_marker is not None:
-            payload["pageMarkers"] = page_marker
-        return httpx.Response(200, json={"TransactionListResponse": payload})
+        assert request.url.path == "/v1/accounts/fake-key/transactions.json"
+        assert request.url.params == httpx.QueryParams(
+            {
+                "marker": "start-marker" if len(calls) == 1 else "18151100002634_1527739200",
+                "count": "3",
+                "startDate": "01012026",
+                "endDate": "01312026",
+                "sortOrder": "DESC",
+            }
+        )
+        assert len(calls) <= 2
+        fixture = (
+            "responses/transactions_response.json"
+            if len(calls) == 1
+            else "responses/transactions_response_page2.json"
+        )
+        return httpx.Response(200, json=load_json_fixture(fixture))
 
     async with ApiTransport(
         settings,
@@ -282,12 +311,59 @@ async def test_transactions_list_all_follows_page_markers(
         transactions = [
             transaction
             async for transaction in TransactionsService(transport).list_all(
-                "fake-key", TransactionsRequest(count=1)
+                "fake-key",
+                TransactionsRequest(
+                    marker="start-marker",
+                    count=3,
+                    start_date="01012026",
+                    end_date="01312026",
+                    sort_order="DESC",
+                ),
             )
         ]
 
     assert len(calls) == 2
-    assert [transaction.transaction_id for transaction in transactions] == ["1", "2"]
+    assert [transaction.transaction_id for transaction in transactions] == [
+        "18165100001766",
+        "18158100000983",
+        "18151100002634",
+        "fake-transaction-4",
+        "fake-transaction-5",
+    ]
+
+
+@pytest.mark.parametrize("marker, count", [(None, 3), ("", 3), ("unused-marker", 4)])
+async def test_transactions_list_all_stops_without_marker_or_on_short_page(
+    settings: ETradeSettings,
+    auth: FakeAuthenticator,
+    marker: str | None,
+    count: int,
+) -> None:
+    calls: list[httpx.Request] = []
+    fixture = load_json_fixture("responses/transactions_response.json")
+    payload = fixture["TransactionListResponse"]
+    if marker is None:
+        payload.pop("marker")
+    else:
+        payload["marker"] = marker
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        assert len(calls) == 1
+        return httpx.Response(200, json=fixture)
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        transactions = [
+            transaction
+            async for transaction in TransactionsService(transport).list_all(
+                "fake-key", TransactionsRequest(count=count)
+            )
+        ]
+
+    assert len(calls) == 1
+    assert len(transactions) == 3
 
 
 async def test_invalid_transactions_responses_are_structured(
