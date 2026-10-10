@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -39,6 +40,68 @@ async def test_get_quote_contract(settings: ETradeSettings, auth: FakeAuthentica
     assert quote.date_time_utc == datetime(2018, 6, 20, 19, 17, tzinfo=UTC)
     assert quote.all is not None
     assert quote.all.last_trade == Decimal("1175.74")
+
+
+@pytest.mark.parametrize("field", ["askTime", "bidTime"])
+@pytest.mark.parametrize("timezone", ["unknown-secret", "+2400", "+12:60"])
+async def test_quote_unsupported_timezone_has_sanitized_error(
+    settings: ETradeSettings,
+    auth: FakeAuthenticator,
+    field: str,
+    timezone: str,
+) -> None:
+    payload = load_json_fixture("responses/quote_response.json")
+    timestamp = f"15:15:43 {timezone} 03-21-2018"
+    payload["QuoteResponse"]["QuoteData"]["All"][field] = timestamp
+
+    async with ApiTransport(
+        settings,
+        authenticator=auth,
+        http_transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload)),
+    ) as transport:
+        with pytest.raises(ETradeResponseError) as error:
+            await MarketService(transport).get_quote("GOOG")
+
+    message = str(error.value)
+    assert "Invalid quote response" in message
+    assert field in message
+    for sensitive_value in (
+        timestamp,
+        timezone,
+        "15:15:43",
+        "03-21-2018",
+        "fake-token",
+        "fake-secret",
+        "fake-verifier",
+        "fake-signature",
+    ):
+        assert sensitive_value not in message
+    assert error.value.__suppress_context__
+
+
+@pytest.mark.parametrize("label, utc_hour", [("PDT", 22), ("PST", 23), ("-07:00", 22)])
+async def test_quote_pacific_timestamps_parse_and_serialize(
+    settings: ETradeSettings, auth: FakeAuthenticator, label: str, utc_hour: int
+) -> None:
+    payload = load_json_fixture("responses/quote_response.json")
+    details = payload["QuoteResponse"]["QuoteData"]["All"]
+    for field in ("askTime", "bidTime"):
+        details[field] = f"15:15:43 {label} 03-21-2018"
+
+    async with ApiTransport(
+        settings,
+        authenticator=auth,
+        http_transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload)),
+    ) as transport:
+        quote = await MarketService(transport).get_quote("GOOG")
+
+    assert quote.all is not None
+    expected = datetime(2018, 3, 21, utc_hour, 15, 43, tzinfo=UTC)
+    assert quote.all.ask_time == expected
+    assert quote.all.bid_time == expected
+    serialized = json.loads(quote.model_dump_json(by_alias=True))
+    for field in ("askTime", "bidTime"):
+        assert serialized["all"][field] == f"2018-03-21T{utc_hour}:15:43Z"
 
 
 async def test_get_quotes_contract(settings: ETradeSettings, auth: FakeAuthenticator) -> None:

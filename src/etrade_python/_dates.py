@@ -2,9 +2,26 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time
+import re
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
+
+# E*TRADE's Getting Started guide specifies US Eastern Time (EST/EDT),
+# but its quote documentation includes a PDT example. Additional abbreviations
+# and numeric offsets improve compatibility; this is not universal timezone support.
+# Abbreviations use their US meanings; explicit labels determine the offset.
+_QUOTE_TIMEZONE_HOURS = {
+    "EST": -5,
+    "EDT": -4,
+    "CST": -6,
+    "CDT": -5,
+    "MST": -7,
+    "MDT": -6,
+    "PST": -8,
+    "PDT": -7,
+    "UTC": 0,
+    "GMT": 0,
+}
 
 
 def parse_broker_datetime(value: Any) -> datetime | None:
@@ -97,13 +114,26 @@ def _parse_string_datetime(value: str) -> datetime | None:
 
 def _parse_quote_datetime(value: str) -> datetime | None:
     parts = value.split()
-    if len(parts) != 3 or parts[1] not in {"EST", "EDT"}:
+    if len(parts) != 3:
         return None
     try:
         parsed = datetime.strptime(f"{parts[0]} {parts[2]}", "%H:%M:%S %m-%d-%Y")
     except ValueError:
         return None
-    return parsed.replace(tzinfo=ZoneInfo("America/New_York")).astimezone(UTC)
+    label = parts[1]
+    if label in _QUOTE_TIMEZONE_HOURS:
+        offset = timedelta(hours=_QUOTE_TIMEZONE_HOURS[label])
+    else:
+        match = re.fullmatch(r"([+-])([0-9]{2}):?([0-9]{2})", label)
+        if match is None:
+            raise ValueError("Unsupported or invalid quote timestamp timezone")
+        hours, minutes = int(match[2]), int(match[3])
+        if hours > 23 or minutes > 59:
+            raise ValueError("Unsupported or invalid quote timestamp timezone")
+        offset = timedelta(hours=hours, minutes=minutes)
+        if match[1] == "-":
+            offset = -offset
+    return parsed.replace(tzinfo=timezone(offset)).astimezone(UTC)
 
 
 def _string_datetime_candidates(value: str) -> tuple[str, ...]:
