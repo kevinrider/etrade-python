@@ -76,15 +76,42 @@ class TransactionsService:
     async def list_all(
         self, account_id_key: str, request: TransactionsRequest | None = None
     ) -> AsyncIterator[Transaction]:
+        """Iterate pages, omitting repeated boundary transactions.
+
+        Automatic pagination requires count >= 2 because an inclusive marker
+        cannot advance a one-record page. Single-page list() permits count=1.
+        """
         base_request = request or TransactionsRequest()
+        count = base_request.count or 50
+        if count == 1:
+            raise ETradeValidationError("Automatic transaction pagination requires count >= 2")
         current_request = base_request
+        previous_last_id: str | None = None
+        seen_markers: set[str] = {base_request.marker} if base_request.marker else set()
         while True:
             page = await self.list(account_id_key, current_request)
-            for transaction in page.transactions:
-                yield transaction
             marker = page.marker
-            if not marker or len(page.transactions) < (base_request.count or 50):
+            has_next_page = bool(marker) and len(page.transactions) >= count
+            if has_next_page and marker in seen_markers:
+                raise ETradeResponseError("Transaction pagination did not advance")
+
+            transactions = page.transactions
+            if (
+                transactions
+                and previous_last_id is not None
+                and transactions[0].transaction_id is not None
+                and str(transactions[0].transaction_id) == previous_last_id
+            ):
+                transactions = transactions[1:]
+            for transaction in transactions:
+                yield transaction
+
+            if not has_next_page:
                 return
+            last_id = page.transactions[-1].transaction_id
+            previous_last_id = str(last_id) if last_id is not None else None
+            if marker is not None:
+                seen_markers.add(marker)
             current_request = base_request.model_copy(update={"marker": marker})
 
 

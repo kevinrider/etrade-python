@@ -332,6 +332,127 @@ async def test_transactions_list_all_follows_marker_and_preserves_filters(
     ]
 
 
+@pytest.mark.parametrize("sort_order", ["DESC", "ASC"])
+async def test_transactions_list_all_omits_inclusive_boundaries(
+    settings: ETradeSettings, auth: FakeAuthenticator, sort_order: str
+) -> None:
+    pages = load_json_fixture("responses/transactions_inclusive_pages.json")["pages"]
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        index = len(calls)
+        calls.append(request)
+        assert index < len(pages)
+        assert request.url.params == httpx.QueryParams(
+            {
+                **({"marker": f"fake-page-{index}"} if index else {}),
+                "count": "2",
+                "sortOrder": sort_order,
+            }
+        )
+        return httpx.Response(200, json=pages[index])
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        transactions = [
+            transaction
+            async for transaction in TransactionsService(transport).list_all(
+                "fake-key", TransactionsRequest(count=2, sort_order=sort_order)
+            )
+        ]
+
+    assert len(calls) == 4
+    assert [transaction.transaction_id for transaction in transactions] == ["1", "2", "3", "4"]
+
+
+async def test_transactions_list_preserves_boundary_and_permits_count_one(
+    settings: ETradeSettings, auth: FakeAuthenticator
+) -> None:
+    pages = load_json_fixture("responses/transactions_inclusive_pages.json")["pages"]
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if request.url.params["count"] == "1":
+            payload = pages[0]["TransactionListResponse"]
+            payload["Transaction"] = payload["Transaction"][:1]
+            payload["transactionCount"] = "1"
+            return httpx.Response(200, json=pages[0])
+        return httpx.Response(200, json=pages[1])
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        service = TransactionsService(transport)
+        page = await service.list("fake-key", TransactionsRequest(count=2))
+        assert [transaction.transaction_id for transaction in page.transactions] == [2, "3"]
+        single_page = await service.list("fake-key", TransactionsRequest(count=1))
+        assert len(single_page.transactions) == 1
+        with pytest.raises(ETradeValidationError, match="count >= 2"):
+            await anext(service.list_all("fake-key", TransactionsRequest(count=1)))
+
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("failure_page", [0, 1, 2])
+async def test_transactions_list_all_rejects_repeated_or_cyclic_markers(
+    settings: ETradeSettings, auth: FakeAuthenticator, failure_page: int
+) -> None:
+    pages = load_json_fixture("responses/transactions_inclusive_pages.json")["pages"]
+    pages[failure_page]["TransactionListResponse"]["marker"] = "fake-page-1"
+    request = TransactionsRequest(count=2, marker="fake-page-1" if failure_page == 0 else None)
+    calls: list[httpx.Request] = []
+    yielded_ids: list[int | str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        index = len(calls)
+        calls.append(request)
+        assert index <= failure_page
+        return httpx.Response(200, json=pages[index])
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        with pytest.raises(ETradeResponseError, match="did not advance") as caught:
+            async for transaction in TransactionsService(transport).list_all("fake-key", request):
+                yielded_ids.append(transaction.transaction_id)
+
+    assert len(calls) == failure_page + 1
+    expected_ids = [[], ["1", "2"], ["1", "2", "3"]][failure_page]
+    assert yielded_ids == expected_ids
+    assert "fake-page-1" not in str(caught.value)
+    assert "fake-key" not in str(caught.value)
+
+
+async def test_transactions_list_all_only_removes_boundary_duplicates(
+    settings: ETradeSettings, auth: FakeAuthenticator
+) -> None:
+    pages = load_json_fixture("responses/transactions_inclusive_pages.json")["pages"]
+    payload = pages[1]["TransactionListResponse"]
+    payload["Transaction"][1]["transactionId"] = "1"
+    payload["marker"] = None
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        index = len(calls)
+        calls.append(request)
+        assert index < 2
+        return httpx.Response(200, json=pages[index])
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        transactions = [
+            transaction
+            async for transaction in TransactionsService(transport).list_all(
+                "fake-key", TransactionsRequest(count=2)
+            )
+        ]
+
+    assert [transaction.transaction_id for transaction in transactions] == ["1", "2", "1"]
+
+
 @pytest.mark.parametrize("marker, count", [(None, 3), ("", 3), ("unused-marker", 4)])
 async def test_transactions_list_all_stops_without_marker_or_on_short_page(
     settings: ETradeSettings,
