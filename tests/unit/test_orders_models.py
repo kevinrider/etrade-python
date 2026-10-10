@@ -54,6 +54,38 @@ def test_orders_request_query_params() -> None:
     }
 
 
+def test_orders_request_accepts_python_field_names() -> None:
+    request = OrdersRequest.model_validate(
+        {
+            "from_date": "01012026",
+            "to_date": "01312026",
+            "security_type": "EQ",
+            "transaction_type": "BUY",
+            "market_session": "REGULAR",
+        }
+    )
+    aliased_request = OrdersRequest(
+        fromDate="01012026",
+        toDate="01312026",
+        securityType="EQ",
+        transactionType="BUY",
+        marketSession="REGULAR",
+    )
+
+    assert request.query_params() == {
+        "marker": None,
+        "count": None,
+        "status": None,
+        "fromDate": "01012026",
+        "toDate": "01312026",
+        "symbol": None,
+        "securityType": "EQ",
+        "transactionType": "BUY",
+        "marketSession": "REGULAR",
+    }
+    assert request.query_params() == aliased_request.query_params()
+
+
 def test_preview_order_request_serializes_envelope() -> None:
     request = _preview_request()
 

@@ -74,7 +74,7 @@ class AlertsRequest(BaseModel):
 class AlertDetailsRequest(BaseModel):
     """Query parameters for alert details lookup."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     html_tags: bool | None = Field(default=None, alias="htmlTags")
 

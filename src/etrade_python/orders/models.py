@@ -467,7 +467,7 @@ class Disclosure(BrokerModel):
 class OrdersRequest(BaseModel):
     """Query parameters for listing orders."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     marker: str | None = None
     count: int | None = Field(default=None, ge=1, le=100)

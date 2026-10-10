@@ -38,6 +38,15 @@ def test_alert_details_request_query_params() -> None:
     assert AlertDetailsRequest().query_params() == {"htmlTags": None}
 
 
+@pytest.mark.parametrize("html_tags", [True, False, None])
+def test_alert_details_request_accepts_python_field_name(html_tags: bool | None) -> None:
+    request = AlertDetailsRequest.model_validate({"html_tags": html_tags})
+    aliased_request = AlertDetailsRequest(htmlTags=html_tags)
+
+    assert request.html_tags is html_tags
+    assert request.query_params() == aliased_request.query_params()
+
+
 def test_alerts_response_parses_fixture() -> None:
     response = AlertsResponse.model_validate(
         load_json_fixture("responses/alerts_response.json")["AlertsResponse"]
