@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
+import etrade_python._dates as broker_dates
 from etrade_python._dates import parse_broker_date, parse_broker_datetime
 
 
@@ -102,14 +103,16 @@ def test_parse_broker_datetime_from_native_datetime_and_date() -> None:
     assert parse_broker_datetime(date(2026, 10, 3)) == datetime(2026, 10, 3, tzinfo=UTC)
 
 
-def test_parse_broker_datetime_from_compact_intraday_time() -> None:
+def test_parse_broker_datetime_from_compact_intraday_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> "FixedDate":
+            return cls(2026, 10, 1)
+
+    monkeypatch.setattr(broker_dates, "date", FixedDate)
     parsed = parse_broker_datetime(153000)
 
-    assert parsed is not None
-    assert parsed.hour == 15
-    assert parsed.minute == 30
-    assert parsed.second == 0
-    assert parsed.tzinfo == UTC
+    assert parsed == datetime(2026, 10, 1, 15, 30, tzinfo=UTC)
 
 
 def test_parse_broker_datetime_rejects_invalid_values() -> None:

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -20,6 +20,7 @@ from etrade_python import (
     AlertsResponse,
     CancelOrderResponse,
     DeleteAlertsResponse,
+    ETradeSettings,
     ETradeValidationError,
     OptionChainRequest,
     OptionChainResponse,
@@ -507,6 +508,24 @@ class FakeClient:
 
     async def __aexit__(self, *_: object) -> None:
         return None
+
+
+@pytest.fixture(autouse=True)
+def cli_date(monkeypatch: pytest.MonkeyPatch) -> Callable[[date], None]:
+    """Keep expiration fixtures independent of the date the suite is run."""
+    current_date = date(2026, 10, 1)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> "FixedDate":
+            return cls(current_date.year, current_date.month, current_date.day)
+
+    def set_date(value: date) -> None:
+        nonlocal current_date
+        current_date = value
+
+    monkeypatch.setattr(cli_app, "date", FixedDate)
+    return set_date
 
 
 @pytest.fixture(autouse=True)
@@ -1163,6 +1182,44 @@ def test_orders_demo_help() -> None:
     assert "Run an interactive order preview/place/change/cancel demo" in result.output
 
 
+@pytest.mark.parametrize(
+    "today, expected",
+    [
+        (date(2026, 10, 1), date(2026, 10, 16)),
+        (date(2026, 10, 16), date(2026, 10, 16)),
+        (date(2026, 10, 17), date(2026, 11, 20)),
+        (date(2026, 12, 19), date(2027, 1, 15)),
+    ],
+)
+def test_next_third_friday_uses_fixed_date(
+    cli_date: Callable[[date], None], today: date, expected: date
+) -> None:
+    cli_date(today)
+    assert _cli_private("_next_third_friday")() == expected
+
+
+@pytest.mark.parametrize(
+    "today, expected_days",
+    [
+        (date(2026, 10, 8), [9, 23]),
+        (date(2026, 10, 9), [9, 23]),
+        (date(2026, 10, 10), [23]),
+        (date(2026, 10, 24), []),
+    ],
+)
+async def test_option_expiration_filtering_uses_fixed_date(
+    monkeypatch: pytest.MonkeyPatch,
+    cli_date: Callable[[date], None],
+    today: date,
+    expected_days: list[int],
+) -> None:
+    set_env(monkeypatch)
+    cli_date(today)
+    client = FakeClient(ETradeSettings(), profile="weekly-expirations")
+    expirations = await _cli_private("_get_option_expirations")(client, "AAPL")
+    assert [expiration.day for expiration in expirations] == expected_days
+
+
 def test_orders_demo_helper_fallbacks() -> None:
     third_friday = _cli_private("_third_friday")
     expiration_date = _cli_private("_expiration_date")
@@ -1514,7 +1571,10 @@ def test_orders_demo_uses_third_friday_fallback_when_no_expirations(
 
     assert result.exit_code == 0
     assert "third-Friday fallback" in result.output
-    assert FakeClient.instances[0].order_preview_request is not None
+    request = FakeClient.instances[0].order_preview_request
+    assert request is not None
+    product = request.orders[0].instruments[0].product
+    assert (product.expiry_year, product.expiry_month, product.expiry_day) == (2026, 10, 16)
 
 
 def test_orders_demo_missing_chain_quote_falls_back_to_manual_price(
