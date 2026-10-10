@@ -46,17 +46,22 @@ class PortfolioService:
     async def iter_positions(
         self, account_id_key: str, request: PortfolioRequest | None = None
     ) -> AsyncIterator[Position]:
+        """Iterate positions using the broker's nextPageNo continuation field."""
         base_request = request or PortfolioRequest()
         current_request = base_request
+        seen_pages = {base_request.page_number or 1}
         while True:
             page = await self.get_positions(account_id_key, current_request)
+            next_page = _next_page_number(page)
+            if next_page in seen_pages:
+                raise ETradeResponseError("Portfolio pagination did not advance")
             for account_portfolio in page.account_portfolios:
                 for position in account_portfolio.positions:
                     yield position
-            marker = _next_marker(page)
-            if not marker:
+            if next_page is None:
                 return
-            current_request = base_request.model_copy(update={"page_number": int(marker)})
+            seen_pages.add(next_page)
+            current_request = base_request.model_copy(update={"page_number": next_page})
 
 
 def _require_mapping(data: JsonValue) -> dict[str, Any]:
@@ -72,11 +77,19 @@ def _unwrap(data: dict[str, Any], envelope: str) -> dict[str, Any]:
     return cast(dict[str, Any], value)
 
 
-def _next_marker(response: PortfolioResponse) -> str | None:
+def _next_page_number(response: PortfolioResponse) -> int | None:
     for account_portfolio in response.account_portfolios:
-        marker = account_portfolio.next or account_portfolio.next_page_no
-        if marker:
-            return marker
+        page_number = account_portfolio.next_page_no
+        if page_number:
+            try:
+                next_page = int(page_number)
+            except ValueError:
+                raise ETradeResponseError("Invalid portfolio pagination page number") from None
+            if next_page < 1:
+                raise ETradeResponseError("Invalid portfolio pagination page number")
+            return next_page
+        if account_portfolio.next:
+            raise ETradeResponseError("Portfolio pagination is missing the next page number")
     return None
 
 

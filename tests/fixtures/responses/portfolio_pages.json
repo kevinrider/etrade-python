@@ -1,0 +1,38 @@
+{
+  "pages": [
+    {
+      "PortfolioResponse": {
+        "AccountPortfolio": [
+          {
+            "position": [{"positionId": 1, "Product": {"symbol": "AAPL"}}],
+            "next": "https://api.etrade.com/v1/accounts/fake-key/portfolio?pageNumber=2",
+            "nextPageNo": "2",
+            "totalPages": 3
+          }
+        ]
+      }
+    },
+    {
+      "PortfolioResponse": {
+        "AccountPortfolio": [
+          {
+            "position": [{"positionId": 2, "Product": {"symbol": "MSFT"}}],
+            "next": "https://api.etrade.com/v1/accounts/fake-key/portfolio?pageNumber=3",
+            "nextPageNo": "3",
+            "totalPages": 3
+          }
+        ]
+      }
+    },
+    {
+      "PortfolioResponse": {
+        "AccountPortfolio": [
+          {
+            "position": [{"positionId": 3, "Product": {"symbol": "GOOG"}}],
+            "totalPages": 3
+          }
+        ]
+      }
+    }
+  ]
+}

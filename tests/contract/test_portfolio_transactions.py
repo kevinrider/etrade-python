@@ -249,6 +249,7 @@ async def test_portfolio_iter_positions_follows_next_page(
         }
         if next_value is not None:
             payload["nextPageNo"] = next_value
+            payload["next"] = "https://api.etrade.com/v1/accounts/fake-key/portfolio?pageNumber=2"
         return httpx.Response(200, json={"PortfolioResponse": {"AccountPortfolio": payload}})
 
     async with ApiTransport(
@@ -265,6 +266,139 @@ async def test_portfolio_iter_positions_follows_next_page(
         "AAPL",
         "MSFT",
     ]
+
+
+@pytest.mark.parametrize("starting_page", [None, 5])
+async def test_portfolio_pagination_preserves_filters(
+    settings: ETradeSettings, auth: FakeAuthenticator, starting_page: int | None
+) -> None:
+    pages = load_json_fixture("responses/portfolio_pages.json")["pages"]
+    start = starting_page or 1
+    for index, page in enumerate(pages[:-1]):
+        page["PortfolioResponse"]["AccountPortfolio"][0]["nextPageNo"] = str(start + index + 1)
+    request_model = PortfolioRequest(
+        count=5,
+        page_number=starting_page,
+        sort_by="SYMBOL",
+        sort_order="ASC",
+        lots_required=True,
+        totals_required=True,
+        view="COMPLETE",
+        market_session="REGULAR",
+    )
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        index = len(calls)
+        calls.append(request)
+        expected = {
+            key: value for key, value in request_model.query_params().items() if value is not None
+        }
+        if index:
+            expected["pageNumber"] = start + index
+        assert request.url.params == httpx.QueryParams(expected)
+        return httpx.Response(200, json=pages[index])
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        positions = [
+            position
+            async for position in PortfolioService(transport).iter_positions(
+                "fake-key", request_model
+            )
+        ]
+
+    assert len(calls) == 3
+    assert [position.position_id for position in positions] == [1, 2, 3]
+
+
+@pytest.mark.parametrize("next_page", ["invalid-secret", "0", "-1", "1.5", None, ""])
+async def test_portfolio_pagination_rejects_invalid_continuation(
+    settings: ETradeSettings, auth: FakeAuthenticator, next_page: str | None
+) -> None:
+    page = load_json_fixture("responses/portfolio_pages.json")["pages"][0]
+    page["PortfolioResponse"]["AccountPortfolio"][0]["nextPageNo"] = next_page
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=page)
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        with pytest.raises(ETradeResponseError) as error:
+            await anext(PortfolioService(transport).iter_positions("fake-key"))
+
+    assert calls == 1
+    for sensitive_value in ("fake-key", "https://", "invalid-secret"):
+        assert sensitive_value not in str(error.value)
+
+
+@pytest.mark.parametrize("failure_page", [0, 1, 2])
+@pytest.mark.parametrize("starting_page", [None, 5])
+async def test_portfolio_pagination_rejects_repeated_or_cyclic_pages(
+    settings: ETradeSettings,
+    auth: FakeAuthenticator,
+    failure_page: int,
+    starting_page: int | None,
+) -> None:
+    pages = load_json_fixture("responses/portfolio_pages.json")["pages"]
+    start = starting_page or 1
+    for index, page in enumerate(pages):
+        page["PortfolioResponse"]["AccountPortfolio"][0]["nextPageNo"] = str(start + index + 1)
+    pages[failure_page]["PortfolioResponse"]["AccountPortfolio"][0]["nextPageNo"] = str(
+        start if failure_page != 1 else start + 1
+    )
+    calls = 0
+    yielded: list[int | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        page = pages[calls]
+        calls += 1
+        return httpx.Response(200, json=page)
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        with pytest.raises(
+            ETradeResponseError, match="Portfolio pagination did not advance"
+        ) as error:
+            async for position in PortfolioService(transport).iter_positions(
+                "fake-key", PortfolioRequest(page_number=starting_page)
+            ):
+                yielded.append(position.position_id)
+
+    assert calls == failure_page + 1
+    assert yielded == list(range(1, failure_page + 1))
+    assert "fake-key" not in str(error.value)
+
+
+async def test_portfolio_pagination_stops_on_empty_continuation(
+    settings: ETradeSettings,
+    auth: FakeAuthenticator,
+) -> None:
+    page = load_json_fixture("responses/portfolio_pages.json")["pages"][-1]
+    page["PortfolioResponse"]["AccountPortfolio"][0].update({"next": "", "nextPageNo": ""})
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=page)
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        positions = [
+            position async for position in PortfolioService(transport).iter_positions("fake-key")
+        ]
+
+    assert len(positions) == 1
+    assert calls == 1
 
 
 async def test_transactions_204_is_empty(settings: ETradeSettings, auth: FakeAuthenticator) -> None:
