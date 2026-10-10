@@ -50,6 +50,15 @@ def test_authorization_url() -> None:
     assert authorization.url.startswith("https://us.etrade.com/e/t/etws/authorize?")
     assert "key=fake+key" in authorization.url
     assert "token=fake%2Ftoken%3D" in authorization.url
+    assert authorization.model_dump()["url"] == authorization.url
+    for representation in (repr(authorization), str(authorization)):
+        for sensitive_value in (
+            authorization.url,
+            "fake/token=",
+            "fake%2Ftoken%3D",
+            "fake-token-secret",
+        ):
+            assert sensitive_value not in representation
 
 
 async def test_request_token_exchange_contract(settings: ETradeSettings) -> None:

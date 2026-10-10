@@ -63,7 +63,7 @@ class AuthorizationUrl(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    url: str
+    url: str = Field(repr=False)
     request_token: RequestToken
 
 
