@@ -76,6 +76,102 @@ async def test_orders_list_all_follows_marker(
     assert len(orders) >= 2
 
 
+async def test_orders_pagination_follows_markers_on_short_and_empty_pages(
+    settings: ETradeSettings, auth: FakeAuthenticator
+) -> None:
+    pages = load_json_fixture("responses/orders_pages.json")["pages"]
+    calls: list[httpx.Request] = []
+    request_model = OrdersRequest.model_validate(
+        {
+            "marker": "initial-marker",
+            "count": 2,
+            "status": "OPEN",
+            "fromDate": "01012026",
+            "toDate": "01312026",
+            "symbol": "AAPL",
+            "securityType": "EQ",
+            "transactionType": "BUY",
+            "marketSession": "REGULAR",
+        }
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        index = len(calls)
+        calls.append(request)
+        expected = request_model.query_params()
+        if index:
+            expected["marker"] = f"fake-page-{index}"
+        assert request.url.params == httpx.QueryParams(expected)
+        return httpx.Response(200, json=pages[index])
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        orders = [
+            order async for order in OrdersService(transport).list_all("fake-key", request_model)
+        ]
+
+    assert len(calls) == 4
+    assert [order.order_id for order in orders] == [1, 2, 3, 4]
+
+
+@pytest.mark.parametrize("marker", [None, ""])
+async def test_orders_pagination_stops_without_marker_despite_next(
+    settings: ETradeSettings, auth: FakeAuthenticator, marker: str | None
+) -> None:
+    page = load_json_fixture("responses/orders_pages.json")["pages"][0]
+    if marker is None:
+        page["OrdersResponse"].pop("marker")
+    else:
+        page["OrdersResponse"]["marker"] = marker
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=page)
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        orders = [
+            order
+            async for order in OrdersService(transport).list_all("fake-key", OrdersRequest(count=2))
+        ]
+
+    assert calls == 1
+    assert [order.order_id for order in orders] == [1, 2]
+
+
+@pytest.mark.parametrize("failure_page", [0, 1, 2])
+async def test_orders_pagination_rejects_repeated_or_cyclic_markers(
+    settings: ETradeSettings, auth: FakeAuthenticator, failure_page: int
+) -> None:
+    pages = load_json_fixture("responses/orders_pages.json")["pages"]
+    pages[failure_page]["OrdersResponse"]["marker"] = "fake-page-1"
+    request_model = OrdersRequest(count=2, marker="fake-page-1" if failure_page == 0 else None)
+    calls = 0
+    yielded: list[int | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        page = pages[calls]
+        calls += 1
+        return httpx.Response(200, json=page)
+
+    async with ApiTransport(
+        settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
+    ) as transport:
+        with pytest.raises(ETradeResponseError, match="Order pagination did not advance") as error:
+            async for order in OrdersService(transport).list_all("fake-key", request_model):
+                yielded.append(order.order_id)
+
+    assert calls == failure_page + 1
+    assert yielded == [[], [1, 2], [1, 2, 3]][failure_page]
+    for sensitive_value in ("fake-page-1", "fake-key", "https://"):
+        assert sensitive_value not in str(error.value)
+
+
 async def test_preview_order_contract(settings: ETradeSettings, auth: FakeAuthenticator) -> None:
     request_model = _preview_request()
 

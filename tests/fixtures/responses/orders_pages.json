@@ -1,0 +1,30 @@
+{
+  "pages": [
+    {
+      "OrdersResponse": {
+        "Order": [{"orderId": 1}, {"orderId": 2}],
+        "marker": "fake-page-1",
+        "next": "https://api.etrade.com/v1/accounts/fake-key/orders?marker=fake-page-1"
+      }
+    },
+    {
+      "OrdersResponse": {
+        "Order": [{"orderId": 3}],
+        "marker": "fake-page-2"
+      }
+    },
+    {
+      "OrdersResponse": {
+        "Order": [],
+        "marker": "fake-page-3"
+      }
+    },
+    {
+      "OrdersResponse": {
+        "Order": [{"orderId": 4}],
+        "marker": "",
+        "next": "https://api.etrade.com/v1/accounts/fake-key/orders?marker=unused"
+      }
+    }
+  ]
+}

@@ -52,15 +52,20 @@ class OrdersService:
     async def list_all(
         self, account_id_key: str, request: OrdersRequest | None = None
     ) -> AsyncIterator[Order]:
+        """Iterate orders until the broker returns an empty continuation marker."""
         base_request = request or OrdersRequest()
         current_request = base_request
+        seen_markers: set[str] = {base_request.marker} if base_request.marker else set()
         while True:
             page = await self.list(account_id_key, current_request)
+            marker = page.marker
+            if marker and marker in seen_markers:
+                raise ETradeResponseError("Order pagination did not advance")
             for order in page.orders:
                 yield order
-            marker = page.marker or page.next
-            if not marker or len(page.orders) < (base_request.count or 25):
+            if not marker:
                 return
+            seen_markers.add(marker)
             current_request = base_request.model_copy(update={"marker": marker})
 
     async def preview(
