@@ -230,6 +230,156 @@ class ProductLookupResponse(BrokerModel):
         return value
 
 
+def _normalize_aliases(value: object, aliases: dict[str, str]) -> object:
+    if not isinstance(value, dict):
+        return value
+    data = dict(cast(dict[str, Any], value))
+    for source, target in aliases.items():
+        if source in data and target not in data:
+            data[target] = data[source]
+        data.pop(source, None)
+    return data
+
+
+def _normalize_collection(value: object, wrappers: tuple[str, ...] = ()) -> object:
+    if isinstance(value, dict):
+        data = cast(dict[str, Any], value)
+        for key in wrappers:
+            if key in data:
+                value = data[key]
+                break
+    if value is None or value == {}:
+        return []
+    if isinstance(value, dict):
+        return [cast(dict[str, Any], value)]
+    return value
+
+
+class OptionGreeks(BrokerModel):
+    rho: Decimal | None = None
+    vega: Decimal | None = None
+    theta: Decimal | None = None
+    delta: Decimal | None = None
+    gamma: Decimal | None = None
+    iv: Decimal | None = None
+    current_value: bool | str | None = Field(default=None, alias="currentValue")
+
+
+class ExtendedHourQuoteDetails(BrokerModel):
+    last_price: Decimal | None = Field(default=None, alias="lastPrice")
+    change: Decimal | None = None
+    percent_change: Decimal | None = Field(default=None, alias="percentChange")
+    bid: Decimal | None = None
+    bid_size: int | None = Field(default=None, alias="bidSize")
+    ask: Decimal | None = None
+    ask_size: int | None = Field(default=None, alias="askSize")
+    volume: int | None = None
+    time_of_last_trade: datetime | None = Field(default=None, alias="timeOfLastTrade")
+    time_zone: str | None = Field(default=None, alias="timeZone")
+    quote_status: str | None = Field(default=None, alias="quoteStatus")
+
+    @field_validator("time_of_last_trade", mode="before")
+    @classmethod
+    def parse_time_of_last_trade(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
+
+
+class OptionDeliverable(BrokerModel):
+    root_symbol: str | None = Field(default=None, alias="rootSymbol")
+    deliverable_symbol: str | None = Field(default=None, alias="deliverableSymbol")
+    deliverable_type_code: str | None = Field(default=None, alias="deliverableTypeCode")
+    deliverable_exchange_code: str | None = Field(default=None, alias="deliverableExchangeCode")
+    deliverable_strike_percent: Decimal | None = Field(
+        default=None, alias="deliverableStrikePercent"
+    )
+    deliverable_cil_shares: Decimal | None = Field(default=None, alias="deliverableCILShares")
+    deliverable_whole_shares: int | None = Field(default=None, alias="deliverableWholeShares")
+
+
+class QuoteMessage(BrokerModel):
+    description: str | None = None
+    code: int | None = None
+    type: str | None = None
+
+
+def _empty_quote_messages() -> list[QuoteMessage]:
+    return []
+
+
+class QuoteMessages(BrokerModel):
+    messages: list[QuoteMessage] = Field(default_factory=_empty_quote_messages, alias="message")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_response(cls, value: object) -> object:
+        return _normalize_aliases(value, {"Message": "message", "messages": "message"})
+
+    @field_validator("messages", mode="before")
+    @classmethod
+    def normalize_messages(cls, value: object) -> object:
+        return _normalize_collection(value)
+
+
+class NetAsset(BrokerModel):
+    value: Decimal | None = None
+    as_of_date: datetime | None = Field(default=None, alias="asOfDate")
+
+    @field_validator("as_of_date", mode="before")
+    @classmethod
+    def parse_as_of_date(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
+
+
+class RedemptionValues(BrokerModel):
+    low: str | None = None
+    high: str | None = None
+    percent: str | None = None
+
+
+class SaleChargeValues(BrokerModel):
+    lowhigh: str | None = None
+    percent: str | None = None
+
+
+def _empty_front_end_values() -> list[RedemptionValues]:
+    return []
+
+
+def _empty_sales_values() -> list[RedemptionValues]:
+    return []
+
+
+class Redemption(BrokerModel):
+    min_month: str | None = Field(default=None, alias="minMonth")
+    fee_percent: str | None = Field(default=None, alias="feePercent")
+    is_front_end: str | None = Field(default=None, alias="isFrontEnd")
+    front_end_values: list[RedemptionValues] = Field(
+        default_factory=_empty_front_end_values, alias="frontEndValues"
+    )
+    redemption_duration_type: str | None = Field(default=None, alias="redemptionDurationType")
+    is_sales: str | None = Field(default=None, alias="isSales")
+    sales_duration_type: str | None = Field(default=None, alias="salesDurationType")
+    sales_values: list[RedemptionValues] = Field(
+        default_factory=_empty_sales_values, alias="salesValues"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_response(cls, value: object) -> object:
+        return _normalize_aliases(
+            value, {"FrontEndValues": "frontEndValues", "SalesValues": "salesValues"}
+        )
+
+    @field_validator("front_end_values", "sales_values", mode="before")
+    @classmethod
+    def normalize_values(cls, value: object) -> object:
+        return _normalize_collection(value, ("Values", "values"))
+
+
+def _empty_option_deliverables() -> list[OptionDeliverable]:
+    return []
+
+
 class QuoteDetails(BrokerModel):
     adjusted_flag: bool | str | None = Field(default=None, alias="adjustedFlag")
     ask: Decimal | None = None
@@ -278,6 +428,19 @@ class QuoteDetails(BrokerModel):
     expiration_date: datetime | None = Field(default=None, alias="expirationDate")
     time_of_last_trade: datetime | None = Field(default=None, alias="timeOfLastTrade")
     average_volume: int | None = Field(default=None, alias="averageVolume")
+    dir_last: str | None = Field(default=None, alias="dirLast")
+    option_underlier_exchange: str | None = Field(default=None, alias="optionUnderlierExchange")
+    upc: int | None = None
+    cash_deliverable: Decimal | None = Field(default=None, alias="cashDeliverable")
+    option_previous_bid_price: Decimal | None = Field(default=None, alias="optionPreviousBidPrice")
+    option_previous_ask_price: Decimal | None = Field(default=None, alias="optionPreviousAskPrice")
+    osi_key: str | None = Field(default=None, alias="osiKey")
+    eh_quote: ExtendedHourQuoteDetails | None = Field(default=None, alias="ehQuote")
+    option_greeks: OptionGreeks | None = Field(default=None, alias="optionGreeks")
+    option_deliverables: list[OptionDeliverable] = Field(
+        default_factory=_empty_option_deliverables, alias="optionDeliverableList"
+    )
+    perf12_months: Decimal | None = Field(default=None, alias="perf12Months")
 
     @field_validator(
         "ask_time",
@@ -295,6 +458,138 @@ class QuoteDetails(BrokerModel):
     def parse_detail_datetimes(cls, value: object) -> datetime | None:
         return parse_broker_datetime(value)
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_detail_aliases(cls, value: object) -> object:
+        return _normalize_aliases(
+            value,
+            {
+                "EhQuote": "ehQuote",
+                "OptionGreeks": "optionGreeks",
+                "OptionDeliverableList": "optionDeliverableList",
+            },
+        )
+
+    @field_validator("option_deliverables", mode="before")
+    @classmethod
+    def normalize_deliverables(cls, value: object) -> object:
+        return _normalize_collection(value, ("optionDeliverable", "OptionDeliverable"))
+
+
+def _empty_deferred_sales_charges() -> list[SaleChargeValues]:
+    return []
+
+
+def _empty_front_end_sales_charges() -> list[SaleChargeValues]:
+    return []
+
+
+class MutualFundQuoteDetails(QuoteDetails):
+    cusip: str | None = None
+    transaction_fee: str | None = Field(default=None, alias="transactionFee")
+    early_redemption_fee: str | None = Field(default=None, alias="earlyRedemptionFee")
+    availability: str | None = None
+    initial_investment: Decimal | None = Field(default=None, alias="initialInvestment")
+    subsequent_investment: Decimal | None = Field(default=None, alias="subsequentInvestment")
+    fund_family: str | None = Field(default=None, alias="fundFamily")
+    fund_name: str | None = Field(default=None, alias="fundName")
+    net_asset_value: Decimal | None = Field(default=None, alias="netAssetValue")
+    public_offer_price: Decimal | None = Field(default=None, alias="publicOfferPrice")
+    net_expense_ratio: Decimal | None = Field(default=None, alias="netExpenseRatio")
+    gross_expense_ratio: Decimal | None = Field(default=None, alias="grossExpenseRatio")
+    order_cutoff_time: datetime | None = Field(default=None, alias="orderCutoffTime")
+    sales_charge: str | None = Field(default=None, alias="salesCharge")
+    initial_ira_investment: Decimal | None = Field(default=None, alias="initialIraInvestment")
+    subsequent_ira_investment: Decimal | None = Field(default=None, alias="subsequentIraInvestment")
+    net_assets: NetAsset | None = Field(default=None, alias="netAssets")
+    fund_inception_date: datetime | None = Field(default=None, alias="fundInceptionDate")
+    average_annual_returns: Decimal | None = Field(default=None, alias="averageAnnualReturns")
+    seven_day_current_yield: Decimal | None = Field(default=None, alias="sevenDayCurrentYield")
+    annual_total_return: Decimal | None = Field(default=None, alias="annualTotalReturn")
+    weighted_average_maturity: Decimal | None = Field(default=None, alias="weightedAverageMaturity")
+    average_annual_return1_yr: Decimal | None = Field(default=None, alias="averageAnnualReturn1Yr")
+    average_annual_return3_yr: Decimal | None = Field(default=None, alias="averageAnnualReturn3Yr")
+    average_annual_return5_yr: Decimal | None = Field(default=None, alias="averageAnnualReturn5Yr")
+    average_annual_return10_yr: Decimal | None = Field(
+        default=None, alias="averageAnnualReturn10Yr"
+    )
+    exchange_name: str | None = Field(default=None, alias="exchangeName")
+    since_inception: Decimal | None = Field(default=None, alias="sinceInception")
+    quarterly_since_inception: Decimal | None = Field(default=None, alias="quarterlySinceInception")
+    actual12_b1_fee: Decimal | None = Field(default=None, alias="actual12B1Fee")
+    performance_as_of_date: datetime | None = Field(default=None, alias="performanceAsOfDate")
+    qtrly_performance_as_of_date: datetime | None = Field(
+        default=None, alias="qtrlyPerformanceAsOfDate"
+    )
+    redemption: Redemption | None = None
+    morning_star_category: str | None = Field(default=None, alias="morningStarCategory")
+    monthly_trailing_return1_y: Decimal | None = Field(
+        default=None, alias="monthlyTrailingReturn1Y"
+    )
+    monthly_trailing_return3_y: Decimal | None = Field(
+        default=None, alias="monthlyTrailingReturn3Y"
+    )
+    monthly_trailing_return5_y: Decimal | None = Field(
+        default=None, alias="monthlyTrailingReturn5Y"
+    )
+    monthly_trailing_return10_y: Decimal | None = Field(
+        default=None, alias="monthlyTrailingReturn10Y"
+    )
+    etrade_early_redemption_fee: str | None = Field(default=None, alias="etradeEarlyRedemptionFee")
+    max_sales_load: Decimal | None = Field(default=None, alias="maxSalesLoad")
+    monthly_trailing_return_ytd: Decimal | None = Field(
+        default=None, alias="monthlyTrailingReturnYTD"
+    )
+    monthly_trailing_return1_m: Decimal | None = Field(
+        default=None, alias="monthlyTrailingReturn1M"
+    )
+    monthly_trailing_return3_m: Decimal | None = Field(
+        default=None, alias="monthlyTrailingReturn3M"
+    )
+    monthly_trailing_return6_m: Decimal | None = Field(
+        default=None, alias="monthlyTrailingReturn6M"
+    )
+    qtrly_trailing_return_ytd: Decimal | None = Field(default=None, alias="qtrlyTrailingReturnYTD")
+    qtrly_trailing_return1_m: Decimal | None = Field(default=None, alias="qtrlyTrailingReturn1M")
+    qtrly_trailing_return3_m: Decimal | None = Field(default=None, alias="qtrlyTrailingReturn3M")
+    qtrly_trailing_return6_m: Decimal | None = Field(default=None, alias="qtrlyTrailingReturn6M")
+    deferred_sales_charges: list[SaleChargeValues] = Field(
+        default_factory=_empty_deferred_sales_charges, alias="deferredSalesCharges"
+    )
+    front_end_sales_charges: list[SaleChargeValues] = Field(
+        default_factory=_empty_front_end_sales_charges, alias="frontEndSalesCharges"
+    )
+    exchange_code: str | None = Field(default=None, alias="exchangeCode")
+
+    @field_validator(
+        "order_cutoff_time",
+        "fund_inception_date",
+        "performance_as_of_date",
+        "qtrly_performance_as_of_date",
+        mode="before",
+    )
+    @classmethod
+    def parse_fund_datetimes(cls, value: object) -> datetime | None:
+        return parse_broker_datetime(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fund_aliases(cls, value: object) -> object:
+        return _normalize_aliases(
+            value,
+            {
+                "NetAssets": "netAssets",
+                "Redemption": "redemption",
+                "DeferredSalesCharges": "deferredSalesCharges",
+                "FrontEndSalesCharges": "frontEndSalesCharges",
+            },
+        )
+
+    @field_validator("deferred_sales_charges", "front_end_sales_charges", mode="before")
+    @classmethod
+    def normalize_sales_charges(cls, value: object) -> object:
+        return _normalize_collection(value, ("saleChargeValues", "SaleChargeValues"))
+
 
 class Quote(BrokerModel):
     date_time: datetime | None = Field(default=None, alias="dateTime")
@@ -310,7 +605,7 @@ class Quote(BrokerModel):
     intraday: QuoteDetails | None = None
     option: QuoteDetails | None = None
     week52: QuoteDetails | None = Field(default=None, alias="week52")
-    mutual_fund: QuoteDetails | None = Field(default=None, alias="mutualFund")
+    mutual_fund: MutualFundQuoteDetails | None = Field(default=None, alias="mutualFund")
     product: Product | None = None
 
     @field_validator("date_time", "date_time_utc", mode="before")
@@ -345,6 +640,7 @@ def _empty_quotes() -> list[Quote]:
 
 
 class QuotesResponse(BrokerModel):
+    messages: QuoteMessages | None = None
     quotes: list[Quote] = Field(default_factory=_empty_quotes, alias="quoteData")
 
     @model_validator(mode="before")
@@ -356,6 +652,9 @@ class QuotesResponse(BrokerModel):
         if "QuoteData" in data and "quoteData" not in data:
             data["quoteData"] = data["QuoteData"]
         data.pop("QuoteData", None)
+        if "Messages" in data and "messages" not in data:
+            data["messages"] = data["Messages"]
+        data.pop("Messages", None)
         return data
 
     @field_validator("quotes", mode="before")
@@ -404,16 +703,6 @@ class OptionExpirationsResponse(BrokerModel):
         if isinstance(value, dict):
             return [cast(dict[str, Any], value)]
         return value
-
-
-class OptionGreeks(BrokerModel):
-    rho: Decimal | None = None
-    vega: Decimal | None = None
-    theta: Decimal | None = None
-    delta: Decimal | None = None
-    gamma: Decimal | None = None
-    iv: Decimal | None = None
-    current_value: bool | str | None = Field(default=None, alias="currentValue")
 
 
 class OptionContract(BrokerModel):

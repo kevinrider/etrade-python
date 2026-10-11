@@ -80,6 +80,17 @@ class PortfolioProduct(BrokerModel):
     expiry_type: str | None = Field(default=None, alias="expiryType")
     product_id: ProductId | None = Field(default=None, alias="productId")
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_product_id(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        data = dict(cast(dict[str, Any], value))
+        if "ProductId" in data and "productId" not in data:
+            data["productId"] = data["ProductId"]
+        data.pop("ProductId", None)
+        return data
+
 
 class QuickView(BrokerModel):
     last_trade: Decimal | None = Field(default=None, alias="lastTrade")
@@ -166,6 +177,56 @@ class CompleteView(BrokerModel):
     quote_status: str | None = Field(default=None, alias="quoteStatus")
     div_pay_date: date | None = Field(default=None, alias="divPayDate")
     ex_dividend_date: date | None = Field(default=None, alias="exDividendDate")
+    adj_last_trade: Decimal | None = Field(default=None, alias="adjLastTrade")
+    perform1_month: Decimal | None = Field(default=None, alias="perform1Month")
+    perform3_month: Decimal | None = Field(default=None, alias="perform3Month")
+    perform6_month: Decimal | None = Field(default=None, alias="perform6Month")
+    perform12_month: Decimal | None = Field(default=None, alias="perform12Month")
+    prev_day_volume: int | None = Field(default=None, alias="prevDayVolume")
+    ten_day_volume: int | None = Field(default=None, alias="tenDayVolume")
+    beta: Decimal | None = None
+    sv10_days_avg: Decimal | None = Field(default=None, alias="sv10DaysAvg")
+    sv20_days_avg: Decimal | None = Field(default=None, alias="sv20DaysAvg")
+    sv1_mon_avg: Decimal | None = Field(default=None, alias="sv1MonAvg")
+    sv2_mon_avg: Decimal | None = Field(default=None, alias="sv2MonAvg")
+    sv3_mon_avg: Decimal | None = Field(default=None, alias="sv3MonAvg")
+    sv4_mon_avg: Decimal | None = Field(default=None, alias="sv4MonAvg")
+    sv6_mon_avg: Decimal | None = Field(default=None, alias="sv6MonAvg")
+    week52_high: Decimal | None = Field(default=None, alias="week52High")
+    week52_low: Decimal | None = Field(default=None, alias="week52Low")
+    week52_range: str | None = Field(default=None, alias="week52Range")
+    market_cap: Decimal | None = Field(default=None, alias="marketCap")
+    days_range: str | None = Field(default=None, alias="daysRange")
+    delta52_wk_high: Decimal | None = Field(default=None, alias="delta52WkHigh")
+    delta52_wk_low: Decimal | None = Field(default=None, alias="delta52WkLow")
+    currency: str | None = None
+    exchange: str | None = None
+    marginable: bool | None = None
+    bid_ask_spread: Decimal | None = Field(default=None, alias="bidAskSpread")
+    bid_size: int | None = Field(default=None, alias="bidSize")
+    ask_size: int | None = Field(default=None, alias="askSize")
+    open: Decimal | None = None
+    delta: Decimal | None = None
+    gamma: Decimal | None = None
+    iv_pct: Decimal | None = Field(default=None, alias="ivPct")
+    rho: Decimal | None = None
+    theta: Decimal | None = None
+    vega: Decimal | None = None
+    premium: Decimal | None = None
+    days_to_expiration: int | None = Field(default=None, alias="daysToExpiration")
+    intrinsic_value: Decimal | None = Field(default=None, alias="intrinsicValue")
+    open_interest: Decimal | None = Field(default=None, alias="openInterest")
+    options_adjusted_flag: bool | None = Field(default=None, alias="optionsAdjustedFlag")
+    deliverables_str: str | None = Field(default=None, alias="deliverablesStr")
+    option_multiplier: Decimal | None = Field(default=None, alias="optionMultiplier")
+    base_symbol_and_price: str | None = Field(default=None, alias="baseSymbolAndPrice")
+    est_earnings: Decimal | None = Field(default=None, alias="estEarnings")
+    eps: Decimal | None = None
+    pe_ratio: Decimal | None = Field(default=None, alias="peRatio")
+    annual_dividend: Decimal | None = Field(default=None, alias="annualDividend")
+    dividend: Decimal | None = None
+    div_yield: Decimal | None = Field(default=None, alias="divYield")
+    cusip: str | None = None
 
     @field_validator("last_trade_time", mode="before")
     @classmethod
@@ -253,6 +314,10 @@ class Position(BrokerModel):
     position_lots: list[PositionLot] = Field(
         default_factory=_empty_position_lots, alias="positionLot"
     )
+    today_commissions: Decimal | None = Field(default=None, alias="todayCommissions")
+    today_fees: Decimal | None = Field(default=None, alias="todayFees")
+    today_price_paid: Decimal | None = Field(default=None, alias="todayPricePaid")
+    today_quantity: Decimal | None = Field(default=None, alias="todayQuantity")
 
     @field_validator("date_acquired", mode="before")
     @classmethod
@@ -278,6 +343,7 @@ class Position(BrokerModel):
             "Quick": "quick",
             "Complete": "complete",
             "PositionLot": "positionLot",
+            "quotestatus": "quoteStatus",
         }.items():
             if source in data and target not in data:
                 data[target] = data[source]

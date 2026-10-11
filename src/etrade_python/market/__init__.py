@@ -1,11 +1,15 @@
 """Market data service and models."""
 
 from etrade_python.market.models import (
+    ExtendedHourQuoteDetails,
     LookupProduct,
+    MutualFundQuoteDetails,
+    NetAsset,
     OptionChainPair,
     OptionChainRequest,
     OptionChainResponse,
     OptionContract,
+    OptionDeliverable,
     OptionExpiration,
     OptionExpirationsRequest,
     OptionExpirationsResponse,
@@ -15,12 +19,26 @@ from etrade_python.market.models import (
     ProductLookupResponse,
     Quote,
     QuoteDetails,
+    QuoteMessage,
+    QuoteMessages,
     QuotesRequest,
     QuotesResponse,
+    Redemption,
+    RedemptionValues,
+    SaleChargeValues,
 )
 from etrade_python.market.service import MarketService
 
 __all__ = [
+    "SaleChargeValues",
+    "RedemptionValues",
+    "Redemption",
+    "QuoteMessages",
+    "QuoteMessage",
+    "OptionDeliverable",
+    "NetAsset",
+    "MutualFundQuoteDetails",
+    "ExtendedHourQuoteDetails",
     "LookupProduct",
     "MarketService",
     "OptionChainPair",

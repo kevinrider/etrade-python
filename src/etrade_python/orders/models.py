@@ -40,6 +40,50 @@ def _strip_broker_metadata(value: object) -> object:
     return value
 
 
+def _normalize_aliases(value: object, aliases: dict[str, str]) -> object:
+    if not isinstance(value, dict):
+        return value
+    data = dict(cast(dict[str, Any], value))
+    for source, target in aliases.items():
+        if source in data and target not in data:
+            data[target] = data[source]
+        data.pop(source, None)
+    return data
+
+
+def _normalize_response_ids(value: object, key: str, wrapper: str) -> object:
+    if isinstance(value, BaseModel):
+        value = value.model_dump(by_alias=True)
+    if isinstance(value, dict):
+        data = cast(dict[str, Any], value)
+        if wrapper in data:
+            value = data[wrapper]
+        elif isinstance(data.get(key), (dict, list)):
+            value = data[key]
+    if value is None or value == {}:
+        return []
+    if isinstance(value, int):
+        return [{key: value}]
+    if isinstance(value, dict):
+        return [cast(dict[str, Any], value)]
+    if isinstance(value, list):
+        items: list[object] = []
+        for item in cast(list[object], value):
+            if isinstance(item, int):
+                items.append({key: item})
+            elif isinstance(item, BaseModel):
+                items.append(item.model_dump(by_alias=True))
+            else:
+                items.append(item)
+        return items
+    return value
+
+
+class OrderProductId(BrokerModel):
+    symbol: str | None = None
+    type_code: str | None = Field(default=None, alias="typeCode")
+
+
 class OrderProduct(BrokerModel):
     symbol: str | None = None
     security_type: str | None = Field(default=None, alias="securityType")
@@ -57,6 +101,17 @@ class OrderProduct(BrokerModel):
         if value is not None and not value.strip():
             raise ValueError("A nonempty value is required")
         return value
+
+
+class OrderResponseProduct(OrderProduct):
+    """Product details returned by the broker, retaining request-model compatibility."""
+
+    product_id: OrderProductId | None = Field(default=None, alias="productId")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_product_id(cls, value: object) -> object:
+        return _normalize_aliases(value, {"ProductId": "productId"})
 
 
 class OrderLot(BrokerModel):
@@ -135,7 +190,7 @@ class OrderInstrumentRequest(BaseModel):
 
 
 class OrderInstrument(BrokerModel):
-    product: OrderProduct | None = Field(default=None, alias="Product")
+    product: OrderResponseProduct | None = Field(default=None, alias="Product")
     symbol_description: str | None = Field(default=None, alias="symbolDescription")
     order_action: str | None = Field(default=None, alias="orderAction")
     quantity_type: str | None = Field(default=None, alias="quantityType")
@@ -155,6 +210,14 @@ class OrderInstrument(BrokerModel):
     osi_key: str | None = Field(default=None, alias="osiKey")
     reserve_order: bool | None = Field(default=None, alias="reserveOrder")
     reserve_quantity: Decimal | None = Field(default=None, alias="reserveQuantity")
+    mf_transaction: str | None = Field(default=None, alias="mfTransaction")
+
+    @field_validator("product", mode="before")
+    @classmethod
+    def normalize_product_model(cls, value: object) -> object:
+        if isinstance(value, OrderProduct) and not isinstance(value, OrderResponseProduct):
+            return value.model_dump(by_alias=True)
+        return value
 
     @model_validator(mode="before")
     @classmethod
@@ -296,6 +359,26 @@ class OrderDetail(BrokerModel):
     instruments: list[OrderInstrument] = Field(
         default_factory=_empty_order_instruments, alias="Instrument"
     )
+    routing_destination: str | None = Field(default=None, alias="routingDestination")
+    bracketed_limit_price: Decimal | None = Field(default=None, alias="bracketedLimitPrice")
+    initial_stop_price: Decimal | None = Field(default=None, alias="initialStopPrice")
+    trail_price: Decimal | None = Field(default=None, alias="trailPrice")
+    trigger_price: Decimal | None = Field(default=None, alias="triggerPrice")
+    condition_price: Decimal | None = Field(default=None, alias="conditionPrice")
+    condition_symbol: str | None = Field(default=None, alias="conditionSymbol")
+    condition_type: str | None = Field(default=None, alias="conditionType")
+    condition_follow_price: str | None = Field(default=None, alias="conditionFollowPrice")
+    condition_security_type: str | None = Field(default=None, alias="conditionSecurityType")
+    replaced_by_order_id: int | None = Field(default=None, alias="replacedByOrderId")
+    replaces_order_id: int | None = Field(default=None, alias="replacesOrderId")
+    preview_id: int | None = Field(default=None, alias="previewId")
+    investment_amount: Decimal | None = Field(default=None, alias="investmentAmount")
+    position_quantity: str | None = Field(default=None, alias="positionQuantity")
+    aip_flag: bool | None = Field(default=None, alias="aipFlag")
+    re_invest_option: str | None = Field(default=None, alias="reInvestOption")
+    estimated_fees: Decimal | None = Field(default=None, alias="estimatedFees")
+    gcd: int | None = None
+    mf_price_type: str | None = Field(default=None, alias="mfpriceType")
 
     @field_validator("preview_time", "placed_time", "executed_time", mode="before")
     @classmethod
@@ -445,12 +528,61 @@ class OrderId(BaseModel):
     order_id: int = Field(alias="orderId")
 
 
+class PreviewResponseId(PreviewId, BrokerModel):
+    """Preview ID and broker margin designation; placement requests use PreviewId."""
+
+    cash_margin: str | None = Field(default=None, alias="cashMargin")
+
+
+class OrderResponseId(OrderId, BrokerModel):
+    """Order ID and margin designation returned by the broker."""
+
+    cash_margin: str | None = Field(default=None, alias="cashMargin")
+
+
 class OrderBuyPowerEffect(BrokerModel):
     current_bp: Decimal | None = Field(default=None, alias="currentBp")
     current_oor: Decimal | None = Field(default=None, alias="currentOor")
     current_net_bp: Decimal | None = Field(default=None, alias="currentNetBp")
     current_order_impact: Decimal | None = Field(default=None, alias="currentOrderImpact")
     net_bp: Decimal | None = Field(default=None, alias="netBp")
+
+
+class CashBuyingPowerDetails(BrokerModel):
+    settled: OrderBuyPowerEffect | None = None
+    settled_unsettled: OrderBuyPowerEffect | None = Field(default=None, alias="settledUnsettled")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_response(cls, value: object) -> object:
+        return _normalize_aliases(
+            value, {"Settled": "settled", "SettledUnsettled": "settledUnsettled"}
+        )
+
+
+class MarginBuyingPowerDetails(BrokerModel):
+    non_marginable: OrderBuyPowerEffect | None = Field(default=None, alias="nonMarginable")
+    marginable: OrderBuyPowerEffect | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_response(cls, value: object) -> object:
+        return _normalize_aliases(
+            value, {"NonMarginable": "nonMarginable", "Marginable": "marginable"}
+        )
+
+
+class DtBuyingPowerDetails(MarginBuyingPowerDetails):
+    """Day-trading buying-power effects for marginable and non-marginable securities."""
+
+
+class PortfolioMargin(BrokerModel):
+    house_excess_equity_new: Decimal | None = Field(default=None, alias="houseExcessEquityNew")
+    pm_eligible: bool | None = Field(default=None, alias="pmEligible")
+    house_excess_equity_curr: Decimal | None = Field(default=None, alias="houseExcessEquityCurr")
+    house_excess_equity_change: Decimal | None = Field(
+        default=None, alias="houseExcessEquityChange"
+    )
 
 
 class Disclosure(BrokerModel):
@@ -633,7 +765,7 @@ def _empty_response_order_details() -> list[OrderDetail]:
     return []
 
 
-def _empty_preview_ids() -> list[PreviewId]:
+def _empty_preview_ids() -> list[PreviewResponseId]:
     return []
 
 
@@ -646,17 +778,54 @@ class PreviewOrderResponse(BrokerModel):
     option_level_cd: int | None = Field(default=None, alias="optionLevelCd")
     margin_level_cd: str | None = Field(default=None, alias="marginLevelCd")
     orders: list[OrderDetail] = Field(default_factory=_empty_response_order_details, alias="Order")
-    preview_ids: list[PreviewId] = Field(default_factory=_empty_preview_ids, alias="PreviewIds")
+    preview_ids: list[PreviewResponseId] = Field(
+        default_factory=_empty_preview_ids, alias="PreviewIds"
+    )
     disclosure: Disclosure | None = Field(default=None, alias="Disclosure")
     settled: OrderBuyPowerEffect | None = None
     settled_unsettled: OrderBuyPowerEffect | None = Field(default=None, alias="settledUnsettled")
+    message_list: Messages | None = Field(default=None, alias="messageList")
+    total_commission: Decimal | None = Field(default=None, alias="totalCommission")
+    portfolio_margin: PortfolioMargin | None = Field(default=None, alias="portfolioMargin")
+    is_employee: bool | None = Field(default=None, alias="isEmployee")
+    commission_message: str | None = Field(default=None, alias="commissionMessage")
+    client_order_id: str | None = Field(default=None, alias="clientOrderId")
+    margin_bp_details: MarginBuyingPowerDetails | None = Field(
+        default=None, alias="marginBpDetails"
+    )
+    cash_bp_details: CashBuyingPowerDetails | None = Field(default=None, alias="cashBpDetails")
+    dt_bp_details: DtBuyingPowerDetails | None = Field(default=None, alias="dtBpDetails")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_response(cls, value: object) -> object:
+        return _normalize_aliases(
+            value,
+            {
+                "order": "Order",
+                "previewIds": "PreviewIds",
+                "disclosure": "Disclosure",
+                "MessageList": "messageList",
+                "Messages": "messageList",
+                "messages": "messageList",
+                "PortfolioMargin": "portfolioMargin",
+                "MarginBpDetails": "marginBpDetails",
+                "CashBpDetails": "cashBpDetails",
+                "DtBpDetails": "dtBpDetails",
+            },
+        )
 
     @field_validator("preview_time", mode="before")
     @classmethod
     def parse_preview_time(cls, value: object) -> datetime | None:
         return parse_broker_datetime(value)
 
-    @field_validator("orders", "preview_ids", mode="before")
+    @field_validator("preview_ids", mode="before")
+    @classmethod
+    def normalize_preview_ids(cls, value: object) -> object:
+        return _normalize_response_ids(value, "previewId", "PreviewId")
+
+    @field_validator("orders", mode="before")
     @classmethod
     def normalize_lists(cls, value: object) -> object:
         if value is None:
@@ -666,7 +835,7 @@ class PreviewOrderResponse(BrokerModel):
         return value
 
 
-def _empty_order_ids() -> list[OrderId]:
+def _empty_order_ids() -> list[OrderResponseId]:
     return []
 
 
@@ -678,14 +847,44 @@ class PlaceOrderResponse(BrokerModel):
     option_level_cd: int | None = Field(default=None, alias="optionLevelCd")
     margin_level_cd: str | None = Field(default=None, alias="marginLevelCd")
     orders: list[OrderDetail] = Field(default_factory=_empty_response_order_details, alias="Order")
-    order_ids: list[OrderId] = Field(default_factory=_empty_order_ids, alias="OrderIds")
+    order_ids: list[OrderResponseId] = Field(default_factory=_empty_order_ids, alias="OrderIds")
+    message_list: Messages | None = Field(default=None, alias="messageList")
+    total_order_value: Decimal | None = Field(default=None, alias="totalOrderValue")
+    total_commission: Decimal | None = Field(default=None, alias="totalCommission")
+    order_id: int | None = Field(default=None, alias="orderId")
+    is_employee: bool | None = Field(default=None, alias="isEmployee")
+    commission_msg: str | None = Field(default=None, alias="commissionMsg")
+    portfolio_margin: PortfolioMargin | None = Field(default=None, alias="portfolioMargin")
+    disclosure: Disclosure | None = None
+    client_order_id: str | None = Field(default=None, alias="clientOrderId")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_response(cls, value: object) -> object:
+        return _normalize_aliases(
+            value,
+            {
+                "order": "Order",
+                "orderIds": "OrderIds",
+                "Disclosure": "disclosure",
+                "MessageList": "messageList",
+                "Messages": "messageList",
+                "messages": "messageList",
+                "PortfolioMargin": "portfolioMargin",
+            },
+        )
 
     @field_validator("placed_time", mode="before")
     @classmethod
     def parse_placed_time(cls, value: object) -> datetime | None:
         return parse_broker_datetime(value)
 
-    @field_validator("orders", "order_ids", mode="before")
+    @field_validator("order_ids", mode="before")
+    @classmethod
+    def normalize_order_ids(cls, value: object) -> object:
+        return _normalize_response_ids(value, "orderId", "OrderId")
+
+    @field_validator("orders", mode="before")
     @classmethod
     def normalize_lists(cls, value: object) -> object:
         if value is None:
