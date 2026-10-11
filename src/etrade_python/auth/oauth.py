@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import logging
+import re
 import secrets
 import time
 from collections.abc import Callable
@@ -262,4 +263,6 @@ class OAuthClient:
             self._settings.consumer_secret.get_secret_value(),
             authorization,
         ]
+        # Redactor also masks decoded forms of percent-encoded OAuth values.
+        secrets_to_mask.extend(re.findall(r'="([^"\r\n]*)"', authorization))
         return Redactor(secrets_to_mask)

@@ -1,3 +1,6 @@
+import logging
+import re
+import traceback
 from datetime import UTC, datetime
 from urllib.parse import unquote
 
@@ -5,7 +8,13 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from etrade_python import ETradeCredentials, ETradeResponseError, ETradeSettings, RequestToken
+from etrade_python import (
+    ETradeApiError,
+    ETradeCredentials,
+    ETradeResponseError,
+    ETradeSettings,
+    RequestToken,
+)
 from etrade_python.auth.oauth import OAuthClient
 
 
@@ -144,6 +153,69 @@ async def test_invalid_oauth_form_response(settings: ETradeSettings) -> None:
     ) as oauth:
         with pytest.raises(ETradeResponseError):
             await oauth.get_request_token()
+
+
+@pytest.mark.parametrize("operation", ["request", "exchange", "renew", "revoke"])
+@pytest.mark.parametrize("decoded", [False, True])
+async def test_oauth_error_redacts_individual_header_secrets(
+    settings: ETradeSettings,
+    caplog: pytest.LogCaptureFixture,
+    operation: str,
+    decoded: bool,
+) -> None:
+    credentials = ETradeCredentials(
+        access_token=SecretStr("sensitiveAccessToken/+="),
+        access_token_secret=SecretStr("fake-access-secret"),
+    )
+    request_token = RequestToken(
+        oauth_token=SecretStr("sensitiveRequestToken/+="),
+        oauth_token_secret=SecretStr("fake-request-secret"),
+    )
+    verifier = "sensitiveVerifier/+="
+    echoed_values: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        parameters = dict(
+            re.findall(r'(oauth_\w+)="([^"\r\n]*)"', request.headers["Authorization"])
+        )
+        for name in ("oauth_consumer_key", "oauth_token", "oauth_verifier", "oauth_signature"):
+            if name in parameters:
+                value = parameters[name]
+                echoed_values.append(unquote(value) if decoded else value)
+        # No field labels: redaction must recognize the individual secret values.
+        return httpx.Response(
+            400,
+            json={"Error": {"code": "42", "message": "Rejected " + " ".join(echoed_values)}},
+            headers={"X-Correlation-ID": echoed_values[-1]},
+        )
+
+    caplog.set_level(logging.DEBUG)
+    async with OAuthClient(settings, http_transport=httpx.MockTransport(handler)) as oauth:
+        with pytest.raises(ETradeApiError) as exc:
+            if operation == "request":
+                await oauth.get_request_token()
+            elif operation == "exchange":
+                await oauth.exchange_verifier(request_token, verifier)
+            elif operation == "renew":
+                await oauth.renew_access_token(credentials)
+            else:
+                await oauth.revoke_access_token(credentials)
+
+    assert exc.value.status_code == 400
+    assert exc.value.broker_code == "42"
+    assert exc.value.broker_message is not None
+    assert "Rejected" in exc.value.broker_message
+    assert "[REDACTED]" in exc.value.broker_message
+    diagnostics = (
+        str(exc.value)
+        + repr(exc.value)
+        + repr(vars(exc.value))
+        + "".join(traceback.format_exception(exc.value))
+        + caplog.text
+        + repr([vars(record) for record in caplog.records])
+    )
+    for value in echoed_values:
+        assert value not in diagnostics
 
 
 def test_oauth_models_do_not_repr_secrets() -> None:
