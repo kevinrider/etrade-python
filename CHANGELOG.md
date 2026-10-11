@@ -29,3 +29,8 @@
   without a limit component before sending requests.
 - Require positive Python integers for caller-supplied order, preview, and alert
   IDs; numeric strings, floats, Decimal values, and booleans are rejected.
+- Reject empty or unrelated HTTP response objects, unrecognized nested objects,
+  and list responses missing their collection field with sanitized parser errors.
+  Preserve explicit empty collections, supported HTTP 204 list results, and direct
+  response-model construction. Order mutation responses must include valid broker
+  confirmation IDs; messages alone do not establish confirmation.
