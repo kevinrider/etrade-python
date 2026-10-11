@@ -1,9 +1,11 @@
+import asyncio
 from collections.abc import Callable, Sequence
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from pydantic import SecretStr
 from typer.testing import CliRunner
@@ -20,6 +22,8 @@ from etrade_python import (
     AlertsResponse,
     CancelOrderResponse,
     DeleteAlertsResponse,
+    ETradeClient,
+    ETradeCredentials,
     ETradeSettings,
     ETradeValidationError,
     OptionChainRequest,
@@ -43,7 +47,7 @@ from etrade_python import (
     TransactionsRequest,
     TransactionsResponse,
 )
-from etrade_python.auth import AuthorizationUrl, RequestToken, TokenStatus
+from etrade_python.auth import AuthorizationUrl, MemoryCredentialStore, RequestToken, TokenStatus
 from etrade_python.cli.app import app
 
 runner = CliRunner()
@@ -565,6 +569,39 @@ def test_auth_login_does_not_echo_verifier(monkeypatch: pytest.MonkeyPatch) -> N
     assert "https://example.test/authorize" in result.output
     assert "Credentials saved" in result.output
     assert "fake-verifier" not in result.output
+
+
+def test_auth_revoke_redirect_preserves_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    credentials = ETradeCredentials(
+        access_token=SecretStr("fake-access-token"),
+        access_token_secret=SecretStr("fake-access-secret"),
+    )
+    store = MemoryCredentialStore()
+    asyncio.run(store.save("default", credentials))
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(302, headers={"Location": "https://example.invalid/"})
+
+    def make_client(settings: ETradeSettings, *, profile: str) -> ETradeClient:
+        return ETradeClient(
+            settings,
+            profile=profile,
+            credential_store=store,
+            http_transport=httpx.MockTransport(handler),
+        )
+
+    monkeypatch.setattr(cli_app, "ETradeClient", make_client)
+    result = runner.invoke(app, ["auth", "revoke"])
+
+    assert result.exit_code == 1
+    assert "HTTP 302" in result.output
+    assert "Credentials removed" not in result.output
+    assert asyncio.run(store.load("default")) == credentials
+    assert len(seen) == 1
+    assert seen[0].url.path == "/oauth/revoke_access_token"
 
 
 def test_accounts_list_human_output(monkeypatch: pytest.MonkeyPatch) -> None:

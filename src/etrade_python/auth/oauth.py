@@ -242,7 +242,7 @@ class OAuthClient:
         except httpx.HTTPError:
             raise ETradeTransportError("OAuth HTTP exchange failed") from None
         try:
-            if response.status_code >= 400:
+            if not 200 <= response.status_code < 300:
                 parse_response(response, redactor)
             LOGGER.info("E*TRADE OAuth request", extra={"operation": operation})
             return response.text

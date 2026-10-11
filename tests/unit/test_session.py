@@ -8,6 +8,7 @@ from pydantic import SecretStr
 from etrade_python import (
     AuthenticationRequired,
     AuthorizationExpired,
+    ETradeApiError,
     ETradeCredentials,
     ETradeHttpAuthenticationError,
     ETradeSettings,
@@ -156,3 +157,26 @@ async def test_renewal_failure_is_structured(settings: ETradeSettings) -> None:
 
     with pytest.raises(ETradeHttpAuthenticationError):
         await manager.ensure_active()
+
+
+async def test_renewal_redirect_preserves_credentials(settings: ETradeSettings) -> None:
+    now = datetime(2026, 9, 26, 18, 0, tzinfo=UTC)
+    credentials = make_credentials(
+        acquired_at=now - timedelta(hours=3), last_used_at=now - timedelta(hours=2)
+    )
+    store = MemoryCredentialStore()
+    await store.save("default", credentials)
+    async with OAuthClient(
+        settings,
+        http_transport=httpx.MockTransport(
+            lambda request: httpx.Response(302, headers={"Location": "https://example.invalid/"})
+        ),
+    ) as oauth:
+        manager = SessionManager(
+            settings=settings, oauth_client=oauth, credential_store=store, clock=lambda: now
+        )
+        with pytest.raises(ETradeApiError) as exc:
+            await manager.ensure_active()
+
+    assert exc.value.status_code == 302
+    assert await store.load("default") == credentials

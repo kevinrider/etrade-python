@@ -125,8 +125,9 @@ async def test_access_token_exchange_includes_verifier(settings: ETradeSettings)
         ("revoke_access_token", "/oauth/revoke_access_token", "Revoked Access Token"),
     ],
 )
+@pytest.mark.parametrize("status_code", [200, 204, 299])
 async def test_renew_and_revoke_contract(
-    settings: ETradeSettings, method_name: str, path: str, expected: str
+    settings: ETradeSettings, method_name: str, path: str, expected: str, status_code: int
 ) -> None:
     credentials = ETradeCredentials(
         access_token=SecretStr("fake-access-token"),
@@ -136,7 +137,7 @@ async def test_renew_and_revoke_contract(
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == path
         assert 'oauth_token="fake-access-token"' in unquote(request.headers["Authorization"])
-        return httpx.Response(200, text=expected)
+        return httpx.Response(status_code, text=expected)
 
     async with OAuthClient(settings, http_transport=httpx.MockTransport(handler)) as oauth:
         if method_name == "renew_access_token":
@@ -145,6 +146,53 @@ async def test_renew_and_revoke_contract(
             result = await oauth.revoke_access_token(credentials)
 
     assert result.message == expected
+
+
+@pytest.mark.parametrize("operation", ["request", "exchange", "renew", "revoke"])
+@pytest.mark.parametrize("status_code", [199, 300, 301, 302, 303, 307, 308, 400, 401, 500])
+async def test_oauth_rejects_non_success_statuses(
+    settings: ETradeSettings, operation: str, status_code: int
+) -> None:
+    credentials = ETradeCredentials(
+        access_token=SecretStr("fake-access-token"),
+        access_token_secret=SecretStr("fake-access-secret"),
+    )
+    request_token = RequestToken(
+        oauth_token=SecretStr("fake-request-token"),
+        oauth_token_secret=SecretStr("fake-request-secret"),
+    )
+    seen: list[httpx.Request] = []
+    responses: list[httpx.Response] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        response = httpx.Response(
+            status_code,
+            headers={"Location": "https://example.invalid/redirect", "X-Correlation-ID": "fake-id"},
+            content=b"oauth_token=fake-token&oauth_token_secret=fake-secret",
+        )
+        responses.append(response)
+        return response
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), follow_redirects=True
+    ) as client:
+        async with OAuthClient(settings, http_client=client) as oauth:
+            with pytest.raises(ETradeApiError) as exc:
+                if operation == "request":
+                    await oauth.get_request_token()
+                elif operation == "exchange":
+                    await oauth.exchange_verifier(request_token, "fake-verifier")
+                elif operation == "renew":
+                    await oauth.renew_access_token(credentials)
+                else:
+                    await oauth.revoke_access_token(credentials)
+        assert not client.is_closed
+
+    assert exc.value.status_code == status_code
+    assert exc.value.request_id == "fake-id"
+    assert len(seen) == 1
+    assert responses[0].is_closed
 
 
 async def test_invalid_oauth_form_response(settings: ETradeSettings) -> None:
