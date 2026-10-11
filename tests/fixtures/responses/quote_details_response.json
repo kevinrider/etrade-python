@@ -1,0 +1,277 @@
+{
+  "QuoteResponse": {
+    "quoteData": [
+      {
+        "all": {
+          "adjustedFlag": true,
+          "ask": "12.345",
+          "askSize": 7,
+          "askTime": "15:15:43 PDT 03-21-2018",
+          "bid": "12.345",
+          "bidExchange": "example",
+          "bidSize": 7,
+          "bidTime": "15:15:43 PDT 03-21-2018",
+          "changeClose": "12.345",
+          "changeClosePercentage": "12.345",
+          "companyName": "example",
+          "daysToExpiration": 7,
+          "dirLast": "example",
+          "dividend": "12.345",
+          "eps": "12.345",
+          "estEarnings": "12.345",
+          "exDividendDate": 1521657600,
+          "high": "12.345",
+          "high52": "12.345",
+          "lastTrade": "12.345",
+          "low": "12.345",
+          "low52": "12.345",
+          "open": "12.345",
+          "openInterest": 7,
+          "optionStyle": "example",
+          "optionUnderlier": "example",
+          "optionUnderlierExchange": "example",
+          "previousClose": "12.345",
+          "previousDayVolume": 7,
+          "primaryExchange": "example",
+          "symbolDescription": "example",
+          "totalVolume": 7,
+          "upc": 7,
+          "optionDeliverableList": [
+            {
+              "rootSymbol": "EXAMPLE",
+              "deliverableSymbol": "EXAMPLE",
+              "deliverableTypeCode": "example",
+              "deliverableExchangeCode": "example",
+              "deliverableStrikePercent": "12.345",
+              "deliverableCILShares": "12.345",
+              "deliverableWholeShares": 7
+            }
+          ],
+          "cashDeliverable": "12.345",
+          "marketCap": "12.345",
+          "sharesOutstanding": "12.345",
+          "nextEarningDate": "03/21/2018",
+          "beta": "12.345",
+          "yield": "12.345",
+          "declaredDividend": "12.345",
+          "dividendPayableDate": 1521657600,
+          "pe": "12.345",
+          "week52LowDate": 1521657600,
+          "week52HiDate": 1521657600,
+          "intrinsicValue": "12.345",
+          "timePremium": "12.345",
+          "optionMultiplier": "12.345",
+          "contractSize": "12.345",
+          "expirationDate": 1521657600,
+          "ehQuote": {
+            "lastPrice": "12.345",
+            "change": "12.345",
+            "percentChange": "12.345",
+            "bid": "12.345",
+            "bidSize": 7,
+            "ask": "12.345",
+            "askSize": 7,
+            "volume": 7,
+            "timeOfLastTrade": 1521657600,
+            "timeZone": "example",
+            "quoteStatus": "REALTIME"
+          },
+          "optionPreviousBidPrice": "12.345",
+          "optionPreviousAskPrice": "12.345",
+          "osiKey": "example",
+          "timeOfLastTrade": 1521657600,
+          "averageVolume": 7
+        },
+        "dateTime": "15:15:43 PDT 03-21-2018",
+        "dateTimeUTC": 1521657600,
+        "quoteStatus": "REALTIME",
+        "ahFlag": "example",
+        "errorMessage": "example",
+        "fundamental": {
+          "companyName": "example",
+          "eps": "12.345",
+          "estEarnings": "12.345",
+          "high52": "12.345",
+          "lastTrade": "12.345",
+          "low52": "12.345",
+          "symbolDescription": "example"
+        },
+        "intraday": {
+          "ask": "12.345",
+          "bid": "12.345",
+          "changeClose": "12.345",
+          "changeClosePercentage": "12.345",
+          "companyName": "example",
+          "high": "12.345",
+          "lastTrade": "12.345",
+          "low": "12.345",
+          "totalVolume": 7
+        },
+        "option": {
+          "ask": "12.345",
+          "askSize": 7,
+          "bid": "12.345",
+          "bidSize": 7,
+          "companyName": "example",
+          "daysToExpiration": 7,
+          "lastTrade": "12.345",
+          "openInterest": 7,
+          "optionPreviousBidPrice": "12.345",
+          "optionPreviousAskPrice": "12.345",
+          "osiKey": "example",
+          "intrinsicValue": "12.345",
+          "timePremium": "12.345",
+          "optionMultiplier": "12.345",
+          "contractSize": "12.345",
+          "symbolDescription": "example",
+          "optionGreeks": {
+            "rho": "12.345",
+            "vega": "12.345",
+            "theta": "12.345",
+            "delta": "12.345",
+            "gamma": "12.345",
+            "iv": "12.345",
+            "currentValue": true
+          }
+        },
+        "product": {
+          "symbol": "EXAMPLE",
+          "securityType": "EQ",
+          "securitySubType": "example",
+          "callPut": "example",
+          "expiryYear": 2026,
+          "expiryMonth": 10,
+          "expiryDay": 16,
+          "strikePrice": "12.345",
+          "expiryType": "example",
+          "productId": {
+            "symbol": "EXAMPLE",
+            "typeCode": "example"
+          }
+        },
+        "week52": {
+          "companyName": "example",
+          "high52": "12.345",
+          "lastTrade": "12.345",
+          "low52": "12.345",
+          "perf12Months": "12.345",
+          "previousClose": "12.345",
+          "symbolDescription": "example",
+          "totalVolume": 7
+        },
+        "mutualFund": {
+          "symbolDescription": "example",
+          "cusip": "example",
+          "changeClose": "12.345",
+          "previousClose": "12.345",
+          "transactionFee": "example",
+          "earlyRedemptionFee": "example",
+          "availability": "example",
+          "initialInvestment": "12.345",
+          "subsequentInvestment": "12.345",
+          "fundFamily": "example",
+          "fundName": "example",
+          "changeClosePercentage": "12.345",
+          "timeOfLastTrade": 1521657600,
+          "netAssetValue": "12.345",
+          "publicOfferPrice": "12.345",
+          "netExpenseRatio": "12.345",
+          "grossExpenseRatio": "12.345",
+          "orderCutoffTime": 1521657600,
+          "salesCharge": "example",
+          "initialIraInvestment": "12.345",
+          "subsequentIraInvestment": "12.345",
+          "netAssets": {
+            "value": "12.345",
+            "asOfDate": 1521657600,
+            "futureAssetField": "preserved"
+          },
+          "fundInceptionDate": 1521657600,
+          "averageAnnualReturns": "12.345",
+          "sevenDayCurrentYield": "12.345",
+          "annualTotalReturn": "12.345",
+          "weightedAverageMaturity": "12.345",
+          "averageAnnualReturn1Yr": "12.345",
+          "averageAnnualReturn3Yr": "12.345",
+          "averageAnnualReturn5Yr": "12.345",
+          "averageAnnualReturn10Yr": "12.345",
+          "high52": "12.345",
+          "low52": "12.345",
+          "week52LowDate": 1521657600,
+          "week52HiDate": 1521657600,
+          "exchangeName": "example",
+          "sinceInception": "12.345",
+          "quarterlySinceInception": "12.345",
+          "lastTrade": "12.345",
+          "actual12B1Fee": "12.345",
+          "performanceAsOfDate": "03/21/2018",
+          "qtrlyPerformanceAsOfDate": "03/21/2018",
+          "redemption": {
+            "minMonth": "example",
+            "feePercent": "example",
+            "isFrontEnd": "example",
+            "frontEndValues": [
+              {
+                "low": "example",
+                "high": "example",
+                "percent": "example"
+              }
+            ],
+            "redemptionDurationType": "example",
+            "isSales": "example",
+            "salesDurationType": "example",
+            "salesValues": [
+              {
+                "low": "example",
+                "high": "example",
+                "percent": "example"
+              }
+            ]
+          },
+          "morningStarCategory": "example",
+          "monthlyTrailingReturn1Y": "12.345",
+          "monthlyTrailingReturn3Y": "12.345",
+          "monthlyTrailingReturn5Y": "12.345",
+          "monthlyTrailingReturn10Y": "12.345",
+          "etradeEarlyRedemptionFee": "example",
+          "maxSalesLoad": "12.345",
+          "monthlyTrailingReturnYTD": "12.345",
+          "monthlyTrailingReturn1M": "12.345",
+          "monthlyTrailingReturn3M": "12.345",
+          "monthlyTrailingReturn6M": "12.345",
+          "qtrlyTrailingReturnYTD": "12.345",
+          "qtrlyTrailingReturn1M": "12.345",
+          "qtrlyTrailingReturn3M": "12.345",
+          "qtrlyTrailingReturn6M": "12.345",
+          "deferredSalesCharges": [
+            {
+              "lowhigh": "example",
+              "percent": "example"
+            }
+          ],
+          "frontEndSalesCharges": [
+            {
+              "lowhigh": "example",
+              "percent": "example"
+            }
+          ],
+          "exchangeCode": "example",
+          "futureFundField": "preserved"
+        },
+        "timeZone": "example",
+        "dstFlag": true,
+        "hasMiniOptions": true,
+        "futureQuoteField": "preserved"
+      }
+    ],
+    "messages": {
+      "message": [
+        {
+          "description": "example",
+          "code": 0,
+          "type": "example"
+        }
+      ]
+    }
+  }
+}

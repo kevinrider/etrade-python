@@ -1,0 +1,201 @@
+{
+  "PreviewOrderResponse": {
+    "orderType": "EQ",
+    "messageList": {
+      "message": [
+        {
+          "description": "example",
+          "code": 0,
+          "type": "example"
+        }
+      ]
+    },
+    "totalOrderValue": "12.345",
+    "totalCommission": "12.345",
+    "order": [
+      {
+        "orderNumber": 7,
+        "accountId": "123456",
+        "previewTime": 1521657600,
+        "placedTime": 1521657600,
+        "executedTime": 1521657600,
+        "orderValue": "12.345",
+        "status": "example",
+        "orderType": "EQ",
+        "orderTerm": "example",
+        "priceType": "LIMIT",
+        "priceValue": "example",
+        "limitPrice": "12.345",
+        "stopPrice": "12.345",
+        "stopLimitPrice": "12.345",
+        "offsetType": "example",
+        "offsetValue": "12.345",
+        "marketSession": "example",
+        "routingDestination": "example",
+        "bracketedLimitPrice": "12.345",
+        "initialStopPrice": "12.345",
+        "trailPrice": "12.345",
+        "triggerPrice": "12.345",
+        "conditionPrice": "12.345",
+        "conditionSymbol": "example",
+        "conditionType": "example",
+        "conditionFollowPrice": "example",
+        "conditionSecurityType": "example",
+        "replacedByOrderId": 7,
+        "replacesOrderId": 7,
+        "allOrNone": true,
+        "previewId": 7,
+        "instrument": [
+          {
+            "product": {
+              "symbol": "EXAMPLE",
+              "securityType": "EQ",
+              "callPut": "example",
+              "expiryYear": 2026,
+              "expiryMonth": 10,
+              "expiryDay": 16,
+              "strikePrice": "12.345",
+              "expiryType": "example",
+              "productId": {
+                "symbol": "EXAMPLE",
+                "typeCode": "example"
+              }
+            },
+            "symbolDescription": "example",
+            "orderAction": "BUY",
+            "quantityType": "example",
+            "quantity": "12.345",
+            "cancelQuantity": "12.345",
+            "orderedQuantity": "12.345",
+            "filledQuantity": "12.345",
+            "averageExecutionPrice": "12.345",
+            "estimatedCommission": "12.345",
+            "estimatedFees": "12.345",
+            "bid": "12.345",
+            "ask": "12.345",
+            "lastprice": "12.345",
+            "currency": "example",
+            "lots": {
+              "lot": [
+                {
+                  "id": 7,
+                  "size": "12.345"
+                }
+              ]
+            },
+            "mfQuantity": {
+              "cash": "12.345",
+              "margin": "12.345",
+              "cusip": "example"
+            },
+            "osiKey": "example",
+            "mfTransaction": "example",
+            "reserveOrder": true,
+            "reserveQuantity": "12.345"
+          }
+        ],
+        "messages": {
+          "message": [
+            {
+              "description": "example",
+              "code": 0,
+              "type": "example"
+            }
+          ]
+        },
+        "investmentAmount": "12.345",
+        "positionQuantity": "example",
+        "aipFlag": true,
+        "egQual": "example",
+        "reInvestOption": "example",
+        "estimatedCommission": "12.345",
+        "estimatedFees": "12.345",
+        "estimatedTotalAmount": "12.345",
+        "netPrice": "12.345",
+        "netBid": "12.345",
+        "netAsk": "12.345",
+        "gcd": 7,
+        "ratio": "example",
+        "mfpriceType": "example"
+      }
+    ],
+    "previewIds": [
+      {
+        "previewId": 7,
+        "cashMargin": "example"
+      }
+    ],
+    "previewTime": 1521657600,
+    "dstFlag": true,
+    "accountId": "123456",
+    "optionLevelCd": 7,
+    "marginLevelCd": "example",
+    "portfolioMargin": {
+      "houseExcessEquityNew": "12.345",
+      "pmEligible": true,
+      "houseExcessEquityCurr": "12.345",
+      "houseExcessEquityChange": "12.345"
+    },
+    "isEmployee": true,
+    "commissionMessage": "example",
+    "disclosure": {
+      "ehDisclosureFlag": true,
+      "ahDisclosureFlag": true,
+      "conditionalDisclosureFlag": true,
+      "aoDisclosureFlag": true,
+      "mfFLConsent": true,
+      "mfEOConsent": true
+    },
+    "clientOrderId": "example",
+    "marginBpDetails": {
+      "nonMarginable": {
+        "currentBp": "12.345",
+        "currentOor": "12.345",
+        "currentNetBp": "12.345",
+        "currentOrderImpact": "12.345",
+        "netBp": "12.345"
+      },
+      "marginable": {
+        "currentBp": "12.345",
+        "currentOor": "12.345",
+        "currentNetBp": "12.345",
+        "currentOrderImpact": "12.345",
+        "netBp": "12.345",
+        "futureBuyingPowerField": "preserved"
+      }
+    },
+    "cashBpDetails": {
+      "settled": {
+        "currentBp": "12.345",
+        "currentOor": "12.345",
+        "currentNetBp": "12.345",
+        "currentOrderImpact": "12.345",
+        "netBp": "12.345"
+      },
+      "settledUnsettled": {
+        "currentBp": "12.345",
+        "currentOor": "12.345",
+        "currentNetBp": "12.345",
+        "currentOrderImpact": "12.345",
+        "netBp": "12.345"
+      }
+    },
+    "dtBpDetails": {
+      "nonMarginable": {
+        "currentBp": "12.345",
+        "currentOor": "12.345",
+        "currentNetBp": "12.345",
+        "currentOrderImpact": "12.345",
+        "netBp": "12.345"
+      },
+      "marginable": {
+        "currentBp": "12.345",
+        "currentOor": "12.345",
+        "currentNetBp": "12.345",
+        "currentOrderImpact": "12.345",
+        "netBp": "12.345"
+      }
+    },
+    "futureOrderField": "preserved"
+  }
+}
