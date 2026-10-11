@@ -1021,16 +1021,17 @@ def test_market_quotes_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.market_quotes_request == QuotesRequest(override_symbol_count=True)
 
 
-def test_market_lookup_human_output(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("search", ["agilent", "Bank of America"])
+def test_market_lookup_human_output(monkeypatch: pytest.MonkeyPatch, search: str) -> None:
     set_env(monkeypatch)
     monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
 
-    result = runner.invoke(app, ["market", "lookup", "agilent"])
+    result = runner.invoke(app, ["market", "lookup", search])
 
     assert result.exit_code == 0
     assert "A" in result.output
     assert "Agilent Technologies Inc." in result.output
-    assert FakeClient.instances[0].market_lookup_search == "agilent"
+    assert FakeClient.instances[0].market_lookup_search == search
 
 
 def test_market_option_expirations_human_output(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -88,6 +88,14 @@ async def test_missing_auth_and_closed(settings: ETradeSettings) -> None:
         "/v1/a b",
         "/v1/a\n",
         "/v1/a%00",
+        "/v1/a%09b",
+        "/v1/a%0Ab",
+        "/v1/a%0Db",
+        "/v1/a%7Fb",
+        "/v1/a%C2%A0b",
+        "/v1/a%E2%80%83b",
+        "/v1/a%2520b",
+        "/v1/a%20 b",
     ],
 )
 async def test_reject_unsafe_paths(settings: ETradeSettings, path: str) -> None:

@@ -121,16 +121,27 @@ async def test_get_quotes_contract(settings: ETradeSettings, auth: FakeAuthentic
     assert len(response.quotes) == 1
 
 
-async def test_product_lookup_contract(settings: ETradeSettings, auth: FakeAuthenticator) -> None:
+@pytest.mark.parametrize(
+    ("search", "encoded_search"),
+    [
+        ("a", "a"),
+        ("Bank of America", "Bank%20of%20America"),
+        ("Bank  of America", "Bank%20%20of%20America"),
+    ],
+)
+async def test_product_lookup_contract(
+    settings: ETradeSettings, auth: FakeAuthenticator, search: str, encoded_search: str
+) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"
-        assert request.url.path == "/v1/market/lookup/a.json"
+        assert request.url.path == f"/v1/market/lookup/{search}.json"
+        assert request.url.raw_path == f"/v1/market/lookup/{encoded_search}.json".encode("ascii")
         return httpx.Response(200, json=load_json_fixture("responses/product_lookup_response.json"))
 
     async with ApiTransport(
         settings, authenticator=auth, http_transport=httpx.MockTransport(handler)
     ) as transport:
-        response = await MarketService(transport).lookup_product("a")
+        response = await MarketService(transport).lookup_product(search)
 
     assert len(response.products) == 3
     assert response.products[0].description == "AGILENT TECHNOLOGIES INC COM"

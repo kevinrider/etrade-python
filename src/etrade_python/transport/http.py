@@ -186,9 +186,11 @@ class ApiTransport:
         decoded = unquote(path)
         if (
             not path.startswith("/v1/")
+            or any(c.isspace() for c in path)
             or any(c in decoded for c in ("?", "#", "\\", "%"))
             or "//" in decoded
-            or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in decoded)
+            # Encoded ordinary spaces are valid in company-name lookup paths.
+            or any((c.isspace() and c != " ") or ord(c) < 32 or ord(c) == 127 for c in decoded)
             or any(part in {".", ".."} for part in decoded.split("/"))
         ):
             raise ETradeValidationError(
