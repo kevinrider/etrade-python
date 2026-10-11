@@ -12,7 +12,11 @@ from etrade_python.accounts.models import (
 )
 from etrade_python.exceptions import ETradeResponseError, ETradeValidationError
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue, raise_response_validation_error
+from etrade_python.transport.response import (
+    JsonValue,
+    raise_response_validation_error,
+    validate_response_shape,
+)
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -29,7 +33,7 @@ class AccountsService:
             safety=RetrySafety.SAFE_READ,
             operation="accounts.list",
         )
-        if response.data is None:
+        if response.status_code == 204 and response.data is None:
             return AccountListResponse(accounts=[])
 
         data = _require_mapping(response.data)
@@ -40,6 +44,8 @@ class AccountsService:
 
         raw_accounts_value = _optional_value(accounts_container, "account", "Account")
         if raw_accounts_value is None:
+            if not any(key in accounts_container for key in ("account", "Account")):
+                raise ETradeResponseError("Invalid account list response: missing collection")
             return AccountListResponse(accounts=[])
         if isinstance(raw_accounts_value, dict):
             raw_accounts: list[Any] = [raw_accounts_value]
@@ -51,7 +57,9 @@ class AccountsService:
         accounts: list[Account] = []
         for index, account in enumerate(raw_accounts):
             try:
-                accounts.append(Account.model_validate(account))
+                accounts.append(
+                    validate_response_shape(Account.model_validate(account), "account list")
+                )
             except ValidationError as error:
                 raise_response_validation_error(
                     "Invalid account list response", error, prefix=f"accounts.{index}"
@@ -75,7 +83,10 @@ class AccountsService:
         data = _require_mapping(response.data)
         balance_data = _unwrap(data, "BalanceResponse")
         try:
-            return AccountBalanceResponse.model_validate(_normalize_balance(balance_data))
+            return validate_response_shape(
+                AccountBalanceResponse.model_validate(_normalize_balance(balance_data)),
+                "account balance",
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid account balance response", error)
 

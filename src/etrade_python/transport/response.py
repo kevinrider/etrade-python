@@ -4,11 +4,12 @@ import json
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import NoReturn, TypeAlias, cast
+from typing import NoReturn, TypeAlias, TypeVar, cast
 from urllib.parse import quote, quote_plus, unquote
 from xml.etree import ElementTree
 
 import httpx
+from pydantic import BaseModel
 
 from etrade_python.exceptions import (
     ETradeApiError,
@@ -20,6 +21,41 @@ from etrade_python.exceptions import (
 )
 
 JsonValue: TypeAlias = "None | bool | int | Decimal | str | list[JsonValue] | dict[str, JsonValue]"
+
+
+ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
+
+
+def validate_response_shape(
+    model: ResponseModel, response_name: str, *, collection_field: str | None = None
+) -> ResponseModel:
+    """Check parsed HTTP data without changing direct model construction."""
+    if collection_field is not None and collection_field not in model.model_fields_set:
+        raise ETradeResponseError(f"Invalid {response_name} response: missing collection")
+    _validate_populated_model(model, response_name, "")
+    return model
+
+
+def _validate_populated_model(model: BaseModel, response_name: str, path: str) -> None:
+    populated = [
+        name
+        for name in type(model).model_fields
+        if name in model.model_fields_set and getattr(model, name) is not None
+    ]
+    if not populated:
+        location = f" at {path}" if path else ""
+        raise ETradeResponseError(
+            f"Invalid {response_name} response: unrecognized object{location}"
+        )
+    for name in populated:
+        value = getattr(model, name)
+        field_path = f"{path}.{name}" if path else name
+        if isinstance(value, BaseModel):
+            _validate_populated_model(value, response_name, field_path)
+        elif isinstance(value, list):
+            for index, item in enumerate(cast(list[object], value)):
+                if isinstance(item, BaseModel):
+                    _validate_populated_model(item, response_name, f"{field_path}.{index}")
 
 
 @dataclass(frozen=True)

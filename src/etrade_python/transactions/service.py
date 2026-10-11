@@ -14,7 +14,11 @@ from etrade_python.transactions.models import (
     TransactionsResponse,
 )
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue, raise_response_validation_error
+from etrade_python.transport.response import (
+    JsonValue,
+    raise_response_validation_error,
+    validate_response_shape,
+)
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -38,12 +42,16 @@ class TransactionsService:
             safety=RetrySafety.SAFE_READ,
             operation="transactions.list",
         )
-        if response.data is None:
+        if response.status_code == 204 and response.data is None:
             return TransactionsResponse(transaction=[])
         data = _require_mapping(response.data)
         transactions_data = _unwrap(data, "TransactionListResponse")
         try:
-            return TransactionsResponse.model_validate(transactions_data)
+            return validate_response_shape(
+                TransactionsResponse.model_validate(transactions_data),
+                "transactions",
+                collection_field="transactions",
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid transactions response", error)
 
@@ -69,7 +77,9 @@ class TransactionsService:
         data = _require_mapping(response.data)
         transaction_data = _unwrap(data, "TransactionDetailsResponse")
         try:
-            return TransactionDetailsResponse.model_validate(transaction_data)
+            return validate_response_shape(
+                TransactionDetailsResponse.model_validate(transaction_data), "transaction details"
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid transaction details response", error)
 

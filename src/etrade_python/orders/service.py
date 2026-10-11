@@ -18,7 +18,11 @@ from etrade_python.orders.models import (
     PreviewOrderResponse,
 )
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue, raise_response_validation_error
+from etrade_python.transport.response import (
+    JsonValue,
+    raise_response_validation_error,
+    validate_response_shape,
+)
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -40,12 +44,14 @@ class OrdersService:
             safety=RetrySafety.SAFE_READ,
             operation="orders.list",
         )
-        if response.data is None:
+        if response.status_code == 204 and response.data is None:
             return OrdersResponse(order=[])
         data = _require_mapping(response.data, "orders")
         orders_data = _unwrap(data, "OrdersResponse", "orders")
         try:
-            return OrdersResponse.model_validate(orders_data)
+            return validate_response_shape(
+                OrdersResponse.model_validate(orders_data), "orders", collection_field="orders"
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid orders response", error)
 
@@ -82,7 +88,11 @@ class OrdersService:
         data = _require_mapping(response.data, "preview order")
         preview_data = _unwrap(data, "PreviewOrderResponse", "preview order")
         try:
-            return PreviewOrderResponse.model_validate(preview_data)
+            parsed = validate_response_shape(
+                PreviewOrderResponse.model_validate(preview_data), "preview order"
+            )
+            _require_confirmation(parsed, preview_data, "preview order")
+            return parsed
         except ValidationError as error:
             raise_response_validation_error("Invalid preview order response", error)
 
@@ -98,7 +108,11 @@ class OrdersService:
         data = _require_mapping(response.data, "place order")
         place_data = _unwrap(data, "PlaceOrderResponse", "place order")
         try:
-            return PlaceOrderResponse.model_validate(place_data)
+            parsed = validate_response_shape(
+                PlaceOrderResponse.model_validate(place_data), "place order"
+            )
+            _require_confirmation(parsed, place_data, "place order")
+            return parsed
         except ValidationError as error:
             raise_response_validation_error("Invalid place order response", error)
 
@@ -117,7 +131,11 @@ class OrdersService:
         data = _require_mapping(response.data, "preview changed order")
         preview_data = _unwrap(data, "PreviewOrderResponse", "preview changed order")
         try:
-            return PreviewOrderResponse.model_validate(preview_data)
+            parsed = validate_response_shape(
+                PreviewOrderResponse.model_validate(preview_data), "preview changed order"
+            )
+            _require_confirmation(parsed, preview_data, "preview changed order")
+            return parsed
         except ValidationError as error:
             raise_response_validation_error("Invalid preview changed order response", error)
 
@@ -136,7 +154,11 @@ class OrdersService:
         data = _require_mapping(response.data, "place changed order")
         place_data = _unwrap(data, "PlaceOrderResponse", "place changed order")
         try:
-            return PlaceOrderResponse.model_validate(place_data)
+            parsed = validate_response_shape(
+                PlaceOrderResponse.model_validate(place_data), "place changed order"
+            )
+            _require_confirmation(parsed, place_data, "place changed order")
+            return parsed
         except ValidationError as error:
             raise_response_validation_error("Invalid place changed order response", error)
 
@@ -154,7 +176,11 @@ class OrdersService:
         data = _require_mapping(response.data, "cancel order")
         cancel_data = _unwrap(data, "CancelOrderResponse", "cancel order")
         try:
-            return CancelOrderResponse.model_validate(cancel_data)
+            parsed = validate_response_shape(
+                CancelOrderResponse.model_validate(cancel_data), "cancel order"
+            )
+            _require_confirmation(parsed, cancel_data, "cancel order")
+            return parsed
         except ValidationError as error:
             raise_response_validation_error("Invalid cancel order response", error)
 
@@ -164,6 +190,54 @@ def _normalize_required(value: str, label: str) -> str:
     if not normalized:
         raise ETradeValidationError(f"{label} is required")
     return normalized
+
+
+def _require_confirmation(
+    response: PreviewOrderResponse | PlaceOrderResponse | CancelOrderResponse,
+    data: dict[str, Any],
+    response_name: str,
+) -> None:
+    if isinstance(response, PreviewOrderResponse):
+        ids = [preview.preview_id for preview in response.preview_ids]
+        raw_ids = data.get("PreviewIds", data.get("previewIds", data.get("preview_ids")))
+        has_boolean = _contains_boolean_id(raw_ids, "previewId", "PreviewId")
+    elif isinstance(response, PlaceOrderResponse):
+        ids = [order.order_id for order in response.order_ids]
+        if response.order_id is not None:
+            ids.append(response.order_id)
+        raw_ids = data.get("OrderIds", data.get("orderIds", data.get("order_ids")))
+        has_boolean = _contains_boolean_id(raw_ids, "orderId", "OrderId") or isinstance(
+            data.get("orderId", data.get("order_id")), bool
+        )
+    else:
+        ids = [] if response.order_id is None else [response.order_id]
+        has_boolean = isinstance(data.get("orderId", data.get("order_id")), bool)
+    if (
+        has_boolean
+        or not ids
+        or any(type(identifier) is not int or identifier <= 0 for identifier in ids)
+    ):
+        raise ETradeResponseError(
+            f"Invalid {response_name} response: missing or invalid confirmation ID"
+        )
+
+
+def _contains_boolean_id(value: object, field: str, wrapper: str) -> bool:
+    """Prevent permissive response integer coercion from treating True as ID 1."""
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, list):
+        return any(_contains_boolean_id(item, field, wrapper) for item in cast(list[object], value))
+    if isinstance(value, dict):
+        data = cast(dict[str, object], value)
+        if wrapper in data:
+            return _contains_boolean_id(data[wrapper], field, wrapper)
+        return _contains_boolean_id(
+            data.get(field, data.get("preview_id" if field == "previewId" else "order_id")),
+            field,
+            wrapper,
+        )
+    return False
 
 
 def _normalize_order_id(order_id: int) -> int:

@@ -19,7 +19,11 @@ from etrade_python.market.models import (
     QuotesResponse,
 )
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue, raise_response_validation_error
+from etrade_python.transport.response import (
+    JsonValue,
+    raise_response_validation_error,
+    validate_response_shape,
+)
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -56,7 +60,9 @@ class MarketService:
         data = _require_mapping(response.data, "quote")
         quote_data = _unwrap(data, "QuoteResponse", "quote")
         try:
-            return QuotesResponse.model_validate(quote_data)
+            return validate_response_shape(
+                QuotesResponse.model_validate(quote_data), "quote", collection_field="quotes"
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid quote response", error)
 
@@ -71,7 +77,11 @@ class MarketService:
         data = _require_mapping(response.data, "product lookup")
         lookup_data = _unwrap(data, "LookupResponse", "product lookup")
         try:
-            return ProductLookupResponse.model_validate(lookup_data)
+            return validate_response_shape(
+                ProductLookupResponse.model_validate(lookup_data),
+                "product lookup",
+                collection_field="products",
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid product lookup response", error)
 
@@ -90,7 +100,11 @@ class MarketService:
         data = _require_mapping(response.data, "option expirations")
         expirations_data = _unwrap(data, "OptionExpireDateResponse", "option expirations")
         try:
-            return OptionExpirationsResponse.model_validate(expirations_data)
+            return validate_response_shape(
+                OptionExpirationsResponse.model_validate(expirations_data),
+                "option expirations",
+                collection_field="expiration_dates",
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid option expirations response", error)
 
@@ -109,7 +123,11 @@ class MarketService:
         data = _require_mapping(response.data, "option chain")
         chain_data = _unwrap(data, "OptionChainResponse", "option chain")
         try:
-            return OptionChainResponse.model_validate(chain_data)
+            return validate_response_shape(
+                OptionChainResponse.model_validate(chain_data),
+                "option chain",
+                collection_field="option_pairs",
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid option chain response", error)
 

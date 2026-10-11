@@ -8,7 +8,11 @@ from pydantic import ValidationError
 from etrade_python.exceptions import ETradeResponseError, ETradeValidationError
 from etrade_python.portfolio.models import PortfolioRequest, PortfolioResponse, Position
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue, raise_response_validation_error
+from etrade_python.transport.response import (
+    JsonValue,
+    raise_response_validation_error,
+    validate_response_shape,
+)
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -32,14 +36,16 @@ class PortfolioService:
             safety=RetrySafety.SAFE_READ,
             operation="portfolio.positions",
         )
-        if response.data is None:
+        if response.status_code == 204 and response.data is None:
             return PortfolioResponse(accountPortfolio=[])
         data = _require_mapping(response.data)
         portfolio_data = _unwrap(data, "PortfolioResponse")
-        if not _looks_like_portfolio_response(portfolio_data):
-            raise ETradeResponseError("Invalid portfolio response")
         try:
-            return PortfolioResponse.model_validate(portfolio_data)
+            return validate_response_shape(
+                PortfolioResponse.model_validate(portfolio_data),
+                "portfolio",
+                collection_field="account_portfolios",
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid portfolio response", error)
 
@@ -91,7 +97,3 @@ def _next_page_number(response: PortfolioResponse) -> int | None:
         if account_portfolio.next:
             raise ETradeResponseError("Portfolio pagination is missing the next page number")
     return None
-
-
-def _looks_like_portfolio_response(data: dict[str, Any]) -> bool:
-    return any(key in data for key in ("AccountPortfolio", "accountPortfolio", "Totals", "totals"))

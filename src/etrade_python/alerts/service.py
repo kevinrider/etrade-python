@@ -14,7 +14,11 @@ from etrade_python.alerts.models import (
 )
 from etrade_python.exceptions import ETradeNotFoundError, ETradeResponseError, ETradeValidationError
 from etrade_python.transport.http import ApiTransport
-from etrade_python.transport.response import JsonValue, raise_response_validation_error
+from etrade_python.transport.response import (
+    JsonValue,
+    raise_response_validation_error,
+    validate_response_shape,
+)
 from etrade_python.transport.retry import RetrySafety
 
 
@@ -38,12 +42,14 @@ class AlertsService:
             if _is_no_alerts_error(error):
                 return AlertsResponse(totalAlerts=0, alerts=[])
             raise
-        if response.data is None:
+        if response.status_code == 204 and response.data is None:
             return AlertsResponse(totalAlerts=0, alerts=[])
         data = _require_mapping(response.data, "alerts")
         alerts_data = _unwrap(data, "AlertsResponse", "alerts")
         try:
-            return AlertsResponse.model_validate(alerts_data)
+            return validate_response_shape(
+                AlertsResponse.model_validate(alerts_data), "alerts", collection_field="alerts"
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid alerts response", error)
 
@@ -62,7 +68,9 @@ class AlertsService:
         data = _require_mapping(response.data, "alert details")
         details_data = _unwrap(data, "AlertDetailsResponse", "alert details")
         try:
-            return AlertDetailsResponse.model_validate(details_data)
+            return validate_response_shape(
+                AlertDetailsResponse.model_validate(details_data), "alert details"
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid alert details response", error)
 
@@ -77,7 +85,9 @@ class AlertsService:
         data = _require_mapping(response.data, "delete alerts")
         delete_data = _unwrap(data, "DeleteAlertsResponse", "delete alerts")
         try:
-            return DeleteAlertsResponse.model_validate(delete_data)
+            return validate_response_shape(
+                DeleteAlertsResponse.model_validate(delete_data), "delete alerts"
+            )
         except ValidationError as error:
             raise_response_validation_error("Invalid delete alerts response", error)
 
