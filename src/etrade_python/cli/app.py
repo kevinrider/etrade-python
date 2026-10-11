@@ -919,25 +919,45 @@ async def _get_option_expirations(client: ETradeClient, symbol: str) -> list[Opt
 
 def _prompt_expiration_choice(expirations: list[OptionExpiration]) -> date:
     default_index = _default_expiration_index(expirations)
-    typer.echo("Available expirations:")
-    for index, expiration in enumerate(expirations[:10], start=1):
-        expiration_date = _expiration_date(expiration)
-        label = expiration_date.isoformat() if expiration_date is not None else "Expiration"
-        suffix = f" {expiration.expiry_type}" if expiration.expiry_type else ""
-        default_marker = " [default]" if index - 1 == default_index else ""
-        typer.echo(f"  {index}. {label}{suffix}{default_marker}")
+    page_size = 10
+    page = default_index // page_size
+    total_pages = (len(expirations) + page_size - 1) // page_size
     while True:
-        selected = typer.prompt("Expiration", default=str(default_index + 1)).strip()
+        start = page * page_size
+        end = min(start + page_size, len(expirations))
+        visible_default = default_index if start <= default_index < end else start
+        typer.echo(f"Available expirations (Page {page + 1} of {total_pages}):")
+        for index in range(start, end):
+            expiration = expirations[index]
+            expiration_date = _expiration_date(expiration)
+            label = expiration_date.isoformat() if expiration_date is not None else "Expiration"
+            suffix = f" {expiration.expiry_type}" if expiration.expiry_type else ""
+            default_marker = " [default]" if index == visible_default else ""
+            typer.echo(f"  {index + 1}. {label}{suffix}{default_marker}")
+        choices = [f"a numbered expiration from the list ({start + 1}-{end})"]
+        if page + 1 < total_pages:
+            typer.echo("  n. Next page")
+            choices.append("n for Next")
+        if page > 0:
+            typer.echo("  p. Previous page")
+            choices.append("p for Previous")
+        selected = typer.prompt("Expiration", default=str(visible_default + 1)).strip().lower()
+        if selected == "n" and page + 1 < total_pages:
+            page += 1
+            continue
+        if selected == "p" and page > 0:
+            page -= 1
+            continue
         try:
             index = int(selected)
         except ValueError:
-            typer.echo("Enter a numbered expiration.")
+            typer.echo(f"Enter {', '.join(choices)}.")
             continue
-        if 1 <= index <= min(len(expirations), 10):
+        if start + 1 <= index <= end:
             expiration_date = _expiration_date(expirations[index - 1])
             if expiration_date is not None:
                 return expiration_date
-        typer.echo("Enter a numbered expiration from the list.")
+        typer.echo(f"Enter {', '.join(choices)}.")
 
 
 def _default_expiration_index(expirations: list[OptionExpiration]) -> int:

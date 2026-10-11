@@ -1292,6 +1292,71 @@ def test_orders_demo_help() -> None:
 
 
 @pytest.mark.parametrize(
+    ("count", "monthly_index", "menu_input", "selected_day", "expected_pages"),
+    [
+        (25, 11, "\n", 12, [2]),
+        (25, None, "n\nn\n25\n", 25, [1, 2, 3]),
+        (25, 11, "p\n\n", 1, [2, 1]),
+        (25, 11, "n\n\n", 21, [2, 3]),
+        (25, 11, "n\np\n\n", 12, [2, 3, 2]),
+        (25, None, "p\n11\nx\nN\nn\nn\nP\n11\n", 11, [1, 1, 1, 1, 2, 3, 3, 2]),
+        (20, 19, "\n", 20, [2]),
+        (10, 8, "\n", 9, [1]),
+        (3, None, "\n", 1, [1]),
+        (3, 1, "3\n", 3, [1]),
+        (1, None, "\n", 1, [1]),
+    ],
+)
+def test_expiration_menu_pagination(
+    count: int,
+    monthly_index: int | None,
+    menu_input: str,
+    selected_day: int,
+    expected_pages: list[int],
+) -> None:
+    expirations = [
+        cli_app.OptionExpiration(
+            year=2026,
+            month=11,
+            day=index + 1,
+            expiryType="MONTHLY" if index == monthly_index else "WEEKLY",
+        )
+        for index in range(count)
+    ]
+    menu = cli_app.typer.Typer()
+
+    @menu.command()
+    def choose() -> None:
+        selected = _cli_private("_prompt_expiration_choice")(expirations)
+        cli_app.typer.echo(f"Selected: {selected.isoformat()}")
+
+    result = runner.invoke(menu, input=menu_input)
+
+    assert result.exit_code == 0
+    assert f"Selected: 2026-11-{selected_day:02d}" in result.output
+    pages = result.output.split("Available expirations (Page ")[1:]
+    assert len(pages) == len(expected_pages)
+    total_pages = (count + 9) // 10
+    for page_output, page_number in zip(pages, expected_pages, strict=True):
+        assert page_output.startswith(f"{page_number} of {total_pages}):")
+        start = (page_number - 1) * 10
+        end = min(start + 10, count)
+        default_index = monthly_index if monthly_index is not None else 0
+        visible_default = default_index if start <= default_index < end else start
+        for index in range(count):
+            label = f"  {index + 1}. 2026-11-{index + 1:02d}"
+            assert (label in page_output) == (start <= index < end)
+        expiry_type = "MONTHLY" if visible_default == monthly_index else "WEEKLY"
+        assert (
+            f"  {visible_default + 1}. 2026-11-{visible_default + 1:02d} {expiry_type} [default]"
+            in page_output
+        )
+        assert f"Expiration [{visible_default + 1}]:" in page_output
+        assert ("n. Next page" in page_output) == (page_number < total_pages)
+        assert ("p. Previous page" in page_output) == (page_number > 1)
+
+
+@pytest.mark.parametrize(
     "today, expected",
     [
         (date(2026, 10, 1), date(2026, 10, 16)),
