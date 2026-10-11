@@ -259,7 +259,7 @@ async def main() -> None:
 
 
 asyncio.run(main())
-```pypi_tmp
+```
 
 The limit price is illustrative, not a trading recommendation. Preview acceptance
 depends on the account and broker validations.
