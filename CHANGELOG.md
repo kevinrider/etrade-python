@@ -22,3 +22,10 @@
   Unknown response fields are now discarded; callers must use explicitly typed
   properties. Order-request extra-field support remains unchanged.
 - Accept both `quoteStatus` and the documented `quotestatus` portfolio spelling.
+- Share supported order values between builders and request models, and accept
+  the documented `EXTO` market session.
+- Reject unknown order request values, nonpositive or nonfinite quantities,
+  incomplete option contracts, invalid applicable prices, and stop-limit orders
+  without a limit component before sending requests.
+- Require positive Python integers for caller-supplied order, preview, and alert
+  IDs; numeric strings, floats, Decimal values, and booleans are rejected.
