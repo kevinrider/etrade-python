@@ -578,7 +578,6 @@ def test_auth_revoke_redirect_preserves_credentials(monkeypatch: pytest.MonkeyPa
         access_token_secret=SecretStr("fake-access-secret"),
     )
     store = MemoryCredentialStore()
-    asyncio.run(store.save("default", credentials))
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -594,12 +593,20 @@ def test_auth_revoke_redirect_preserves_credentials(monkeypatch: pytest.MonkeyPa
         )
 
     monkeypatch.setattr(cli_app, "ETradeClient", make_client)
+
+    async def stored_credentials(*, save: bool = False) -> ETradeCredentials | None:
+        async with make_client(ETradeSettings(), profile="default") as client:
+            if save:
+                await client.session.save(credentials)
+            return await client.session.load()
+
+    asyncio.run(stored_credentials(save=True))
     result = runner.invoke(app, ["auth", "revoke"])
 
     assert result.exit_code == 1
     assert "HTTP 302" in result.output
     assert "Credentials removed" not in result.output
-    assert asyncio.run(store.load("default")) == credentials
+    assert asyncio.run(stored_credentials()) == credentials
     assert len(seen) == 1
     assert seen[0].url.path == "/oauth/revoke_access_token"
 

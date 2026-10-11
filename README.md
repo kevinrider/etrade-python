@@ -108,6 +108,11 @@ suffixes are format selectors and do not create separate endpoints.
 
 ## Diagnostic CLI
 
+Credentials are stored in the system keyring separately for each environment,
+consumer key, and profile. The storage identifier uses a SHA-256 fingerprint of
+the consumer key rather than the raw key. Custom credential stores receive the
+same namespaced identifiers through `SessionManager`.
+
 The CLI is intended for authentication bootstrap and manual read-only diagnostics.
 After authenticating with `etrade auth login`, you can manually exercise the
 read-only account, portfolio, transactions, alerts, and market data endpoints:

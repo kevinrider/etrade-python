@@ -1,6 +1,7 @@
 """OAuth access-token lifecycle management."""
 
 import asyncio
+import hashlib
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -40,14 +41,17 @@ class SessionManager:
         self._settings = settings
         self._oauth_client = oauth_client
         self._credential_store = credential_store
-        self._profile = profile
+        consumer_fingerprint = hashlib.sha256(
+            settings.consumer_key.get_secret_value().encode("utf-8")
+        ).hexdigest()
+        self._storage_key = f"{settings.environment.value}:{consumer_fingerprint}:{profile}"
         self._clock = clock or (lambda: datetime.now(UTC))
         self._renewal_lock = asyncio.Lock()
 
     async def ensure_active(self) -> ETradeCredentials:
         async with self._renewal_lock:
             now = self._now()
-            credentials = await self._credential_store.load(self._profile)
+            credentials = await self.load()
             status = self.status(credentials, now=now)
             if status is TokenStatus.MISSING:
                 raise AuthenticationRequired("E*TRADE authorization is required")
@@ -57,21 +61,21 @@ class SessionManager:
                 raise AuthorizationExpired("E*TRADE authorization has expired")
             if status is TokenStatus.ACTIVE:
                 updated = credentials.with_last_used(now)
-                await self._credential_store.save(self._profile, updated)
+                await self.save(updated)
                 return updated
             result = await self._oauth_client.renew_access_token(credentials)
             renewed = result.credentials.with_renewal(self._now())
-            await self._credential_store.save(self._profile, renewed)
+            await self.save(renewed)
             return renewed
 
     async def save(self, credentials: ETradeCredentials) -> None:
-        await self._credential_store.save(self._profile, credentials)
+        await self._credential_store.save(self._storage_key, credentials)
 
     async def load(self) -> ETradeCredentials | None:
-        return await self._credential_store.load(self._profile)
+        return await self._credential_store.load(self._storage_key)
 
     async def delete(self) -> None:
-        await self._credential_store.delete(self._profile)
+        await self._credential_store.delete(self._storage_key)
 
     def status(
         self, credentials: ETradeCredentials | None, *, now: datetime | None = None
