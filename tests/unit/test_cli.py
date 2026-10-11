@@ -1513,6 +1513,58 @@ def test_orders_demo_scenarios_preview_only(
     assert client.order_place_request is None
 
 
+@pytest.mark.parametrize(
+    ("short_bid", "long_ask", "price_input", "expected_price_type", "expected_price"),
+    [
+        ("3", "1", "\n\n", "NET_CREDIT", "4"),
+        ("1", "3", "\n\n", "NET_DEBIT", "4"),
+        ("3", None, "\n4\n", "NET_CREDIT", "4"),
+        ("3", "1", "NET_DEBIT\n7.50\n", "NET_DEBIT", "7.50"),
+    ],
+)
+def test_orders_demo_iron_condor_net_price(
+    monkeypatch: pytest.MonkeyPatch,
+    short_bid: str,
+    long_ask: str | None,
+    price_input: str,
+    expected_price_type: str,
+    expected_price: str,
+) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    chain = OptionChainResponse.model_validate(
+        {
+            "nearPrice": "200",
+            "OptionPair": [
+                {"Put": {"strikePrice": "180", "ask": long_ask}},
+                {"Put": {"strikePrice": "190", "bid": short_bid}},
+                {"Call": {"strikePrice": "210", "bid": short_bid}},
+                {"Call": {"strikePrice": "220", "ask": long_ask}},
+            ],
+        }
+    )
+
+    async def get_option_chain(
+        self: FakeMarket, symbol: str, request: OptionChainRequest | None = None
+    ) -> OptionChainResponse:
+        return chain
+
+    monkeypatch.setattr(FakeMarket, "get_option_chain", get_option_chain)
+    result = runner.invoke(
+        app,
+        ["orders", "demo"],
+        input="1\n5\ndemocondor\nAAPL\n\n\n2\n1\n1\n2\n" + price_input + "n\n",
+    )
+
+    assert result.exit_code == 0
+    request = FakeClient.instances[0].order_preview_request
+    assert request is not None
+    detail = request.orders[0]
+    assert detail.price_type == expected_price_type
+    assert detail.limit_price == Decimal(expected_price)
+    assert FakeClient.instances[0].order_place_request is None
+
+
 def test_orders_demo_buy_write_reprompts_for_uncovered_ratio(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

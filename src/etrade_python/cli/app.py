@@ -856,8 +856,8 @@ async def _build_demo_order(
         short_call_strike, short_call = _prompt_option_contract(chain, "CALL", "Short call strike")
         long_call_strike, long_call = _prompt_option_contract(chain, "CALL", "Long call strike")
         signed_estimate = _add(
-            _subtract(_contract_bid(short_put), _contract_ask(long_put)),
-            _subtract(_contract_bid(short_call), _contract_ask(long_call)),
+            _subtract(_contract_ask(long_put), _contract_bid(short_put)),
+            _subtract(_contract_ask(long_call), _contract_bid(short_call)),
         )
         price_type, price = _prompt_net_price(signed_estimate, "NET_CREDIT")
         builder.order_type("SPREADS").with_symbol(symbol).with_expiration(expiration)
