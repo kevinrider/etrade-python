@@ -1,4 +1,13 @@
-# etrade-python
+<div align="center">
+<img src="https://repository-images.githubusercontent.com/1391295794/76df490d-7ec2-48f4-87e8-d4945d37f722" alt="E*TRADE and Python logos above the etrade-python title" width="640">
+</div>
+
+<div align="center">
+<a href="https://github.com/kevinrider/etrade-python/releases"><img src="https://img.shields.io/github/release/kevinrider/etrade-python.svg?style=flat-square" alt="Latest Version"></a>
+<a href="https://github.com/kevinrider/etrade-python/actions/workflows/ci.yml"><img src="https://github.com/kevinrider/etrade-python/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://github.com/kevinrider/etrade-python/issues"><img src="https://img.shields.io/github/issues/kevinrider/etrade-python" alt="GitHub issues"></a>
+<a href="https://github.com/kevinrider/etrade-python/blob/main/LICENSE"><img src="https://img.shields.io/github/license/kevinrider/etrade-python" alt="License"></a>
+</div>
 
 An unofficial, typed, async-first Python client for the E*TRADE REST API.
 
