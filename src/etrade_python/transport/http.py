@@ -139,7 +139,7 @@ class ApiTransport:
                 raise ETradeValidationError("Could not construct HTTP request") from None
             original_url, original_content = request.url, request.content
             try:
-                await self._authenticator.authenticate(request)
+                record_usage = await self._authenticator.authenticate(request)
             except AuthenticationRequired:
                 raise AuthenticationRequired("Authorization is required") from None
             except AuthorizationExpired:
@@ -177,6 +177,16 @@ class ApiTransport:
                 await self._sleep(delay)
                 continue
             try:
+                if 200 <= response.status_code < 300 and record_usage is not None:
+                    try:
+                        await record_usage()
+                    except Exception:
+                        # A local storage failure must not obscure a successful trade
+                        # or cause callers to retry a confirmed broker exchange.
+                        LOGGER.warning(
+                            "Could not record authenticated request usage",
+                            extra={"operation": operation},
+                        )
                 return parse_response(response, redactor)
             finally:
                 await response.aclose()

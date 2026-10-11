@@ -162,7 +162,7 @@ async def test_missing_credentials_raise_authentication_required(settings: ETrad
         await manager.ensure_active()
 
 
-async def test_active_credentials_update_last_used(settings: ETradeSettings) -> None:
+async def test_active_credentials_leave_last_used_unchanged(settings: ETradeSettings) -> None:
     now = datetime(2026, 9, 26, 18, 0, tzinfo=UTC)
     store = MemoryCredentialStore()
 
@@ -179,7 +179,7 @@ async def test_active_credentials_update_last_used(settings: ETradeSettings) -> 
 
     credentials = await manager.ensure_active()
 
-    assert credentials.last_used_at == now
+    assert credentials.last_used_at == now - timedelta(minutes=1)
     assert (await manager.load()) == credentials
 
 
@@ -363,3 +363,54 @@ async def test_custom_store_receives_namespaced_keys(
     ):
         assert secret.get_secret_value() not in store.keys[0]
     assert store.keys[0] not in caplog.text
+
+
+@pytest.mark.parametrize("change", ["deleted", "token", "secret", "acquired", "renewed"])
+async def test_usage_respects_concurrent_credential_changes(
+    settings: ETradeSettings, change: str
+) -> None:
+    now = datetime(2026, 9, 26, 18, tzinfo=UTC)
+    original = make_credentials(acquired_at=now - timedelta(hours=1), last_used_at=now)
+    async with OAuthClient(settings) as oauth:
+        manager = SessionManager(
+            settings=settings,
+            oauth_client=oauth,
+            credential_store=MemoryCredentialStore(),
+            clock=lambda: now + timedelta(minutes=1),
+        )
+        await manager.save(original)
+        expected = original
+        if change == "deleted":
+            await manager.delete()
+            await manager.record_usage(original)
+            assert await manager.load() is None
+            return
+        if change == "token":
+            expected = original.model_copy(update={"access_token": SecretStr("replacement-token")})
+        elif change == "secret":
+            expected = original.model_copy(update={"access_token_secret": SecretStr("new-secret")})
+        elif change == "acquired":
+            expected = original.model_copy(update={"acquired_at": now})
+        else:
+            expected = original.with_renewal(now + timedelta(minutes=2))
+        await manager.save(expected)
+        await manager.record_usage(original)
+        assert await manager.load() == expected
+
+
+async def test_usage_updates_are_serialized_and_monotonic(settings: ETradeSettings) -> None:
+    now = datetime(2026, 9, 26, 18, tzinfo=UTC)
+    clocks = iter([now + timedelta(minutes=2), now + timedelta(minutes=1)])
+    original = make_credentials(acquired_at=now - timedelta(hours=1), last_used_at=now)
+    async with OAuthClient(settings) as oauth:
+        manager = SessionManager(
+            settings=settings,
+            oauth_client=oauth,
+            credential_store=MemoryCredentialStore(),
+            clock=lambda: next(clocks),
+        )
+        await manager.save(original)
+        await asyncio.gather(manager.record_usage(original), manager.record_usage(original))
+        stored = await manager.load()
+        assert stored is not None
+        assert stored.last_used_at == now + timedelta(minutes=2)

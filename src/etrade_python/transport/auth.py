@@ -1,16 +1,17 @@
-"""The request authentication boundary; OAuth arrives in milestone 2."""
+"""Request authentication and optional confirmed-usage notification."""
 
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 import httpx
 
 
 class RequestAuthenticator(Protocol):
-    async def authenticate(self, request: httpx.Request) -> None:
+    async def authenticate(self, request: httpx.Request) -> Callable[[], Awaitable[None]] | None:
         """Attach auth headers in place, using fresh signing state for each attempt.
 
         Must not change the method, URL, or body. Implementations must mask their own repr
-        and must not log secrets. A future SessionManager-backed adapter implements
-        this protocol without making the transport depend on a credential store.
+        and must not log secrets. May return a request-local callback to record usage
+        after a completed 2xx exchange. Returning None requires no notification.
         """
         ...

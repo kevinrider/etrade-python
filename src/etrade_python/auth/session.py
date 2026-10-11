@@ -2,7 +2,7 @@
 
 import asyncio
 import hashlib
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from zoneinfo import ZoneInfo
@@ -60,9 +60,7 @@ class SessionManager:
             if status is TokenStatus.EXPIRED:
                 raise AuthorizationExpired("E*TRADE authorization has expired")
             if status is TokenStatus.ACTIVE:
-                updated = credentials.with_last_used(now)
-                await self.save(updated)
-                return updated
+                return credentials
             return await self._renew(credentials)
 
     async def renew(self) -> ETradeCredentials:
@@ -79,17 +77,36 @@ class SessionManager:
         """Perform renewal while the caller holds the renewal lock."""
         result = await self._oauth_client.renew_access_token(credentials)
         renewed = result.credentials.with_renewal(self._now())
-        await self.save(renewed)
+        await self._save(renewed)
         return renewed
 
     async def save(self, credentials: ETradeCredentials) -> None:
+        async with self._renewal_lock:
+            await self._save(credentials)
+
+    async def _save(self, credentials: ETradeCredentials) -> None:
         await self._credential_store.save(self._storage_key, credentials)
 
     async def load(self) -> ETradeCredentials | None:
         return await self._credential_store.load(self._storage_key)
 
     async def delete(self) -> None:
-        await self._credential_store.delete(self._storage_key)
+        async with self._renewal_lock:
+            await self._credential_store.delete(self._storage_key)
+
+    async def record_usage(self, credentials: ETradeCredentials) -> None:
+        """Record confirmed usage without overwriting newer or replaced credentials."""
+        used_at = self._now()
+        async with self._renewal_lock:
+            current = await self.load()
+            if current is None or (
+                current.access_token != credentials.access_token
+                or current.access_token_secret != credentials.access_token_secret
+                or current.acquired_at != credentials.acquired_at
+            ):
+                return
+            if used_at > current.last_used_at:
+                await self._save(current.with_last_used(used_at))
 
     def status(
         self, credentials: ETradeCredentials | None, *, now: datetime | None = None
@@ -127,6 +144,11 @@ class SessionAuthenticator:
         self._session_manager = session_manager
         self._oauth_client = oauth_client
 
-    async def authenticate(self, request: httpx.Request) -> None:
+    async def authenticate(self, request: httpx.Request) -> Callable[[], Awaitable[None]]:
         credentials = await self._session_manager.ensure_active()
         self._oauth_client.sign_request(request, credentials)
+
+        async def record_usage() -> None:
+            await self._session_manager.record_usage(credentials)
+
+        return record_usage
