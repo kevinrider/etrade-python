@@ -1,40 +1,75 @@
 # Contributing
 
-Use Python 3.11+ and install `.[dev]` in a virtual environment. Runtime code must
-be async, typed, and use the shared request pipeline.
+Use Python 3.11+ and uv. Runtime network code must be async, typed, and use the
+shared request pipeline. Keep API services independent of application frameworks.
 
-Before implementing an endpoint, review its official specification, inspect the
-relevant reference-library behavior, document the intended Python API, and add
-original fake-only contract fixtures. Do not copy reference implementation code
-or tests. Update `docs/api-coverage.md` with actual implementation and verification.
+## Development workflow
 
 Run from the repository root:
 
 ```sh
-ruff check .
-ruff format --check .
-pyright
-pytest
-python -m build
-python -m twine check dist/*
+make install
+make check
+make package-check
 ```
 
-Pytest excludes `sandbox` and `production` by default. `pytest -m sandbox` explicitly
-selects future sandbox tests; none exist yet. Never place trades in ordinary CI.
-Use HTTPX MockTransport at the HTTP boundary rather than mocking service methods.
-Require at least 90% branch coverage for implemented code. Use fake secrets only.
+`make install` creates or synchronizes the virtual environment with development
+dependencies. `make check` runs Ruff lint and formatting checks, Pyright, and
+pytest. `make package-check` builds the wheel and source distribution and checks
+package metadata with Twine.
 
-Verify installation in a separate environment, outside the source directory:
+Use `make format` to apply formatting. Individual checks are available through
+`make lint`, `make format-check`, `make type`, and `make test`.
+
+If you need to recreate the environment, `make venv-reset` deletes `.venv`, creates
+it with Python 3.12, and reinstalls dependencies. This does not change the library's
+Python 3.11+ requirement.
+
+## Implementation and tests
+
+Review the official E*TRADE specification before changing endpoint behavior.
+Document the intended public Python API in the pull request and implement it
+independently; do not mechanically translate reference implementation code.
+Update the README coverage table when endpoint support or verification changes.
+Public contributions must not depend on unpublished local documentation.
+
+Use HTTPX MockTransport at the HTTP boundary for contract tests, exercising
+request serialization and response parsing into typed models. Keep tests offline
+and use fake credentials and customer data. Pin clocks in time-dependent tests.
+Follow the provenance and maintenance guidance in [tests/fixtures/README.md](tests/fixtures/README.md)
+when adding or converting fixtures.
+
+Coverage includes statements and branches; the configured combined threshold is
+90%. Pytest excludes `sandbox` and `production` markers by default. No live
+integration tests are currently included. Any future live tests must be explicitly
+selected, and production tests must be read-only by default. Never place trades
+in ordinary CI.
+
+Test pagination, validation, credential redaction, and retry behavior when changing
+those features. Order mutations must not acquire automatic retries.
+
+## Package verification and releases
+
+After `make package-check`, verify installation outside the source checkout in a
+separate environment:
 
 ```sh
-python -m venv /tmp/etrade-wheel-check
-/tmp/etrade-wheel-check/bin/python -m pip install dist/*.whl
-(cd /tmp && /tmp/etrade-wheel-check/bin/python -c 'import etrade_python; print(etrade_python.__version__)')
+wheel_check_dir="$(mktemp -d)"
+uv venv --python 3.12 "$wheel_check_dir"
+uv pip install --python "$wheel_check_dir/bin/python" dist/*.whl
+(cd /tmp && "$wheel_check_dir/bin/python" -c 'import etrade_python; print(etrade_python.__version__)')
+(cd /tmp && "$wheel_check_dir/bin/etrade" --version)
 ```
 
-Build the sdist and wheel without importing the package in build metadata. The
-release version remains `0.1.0.dev0` until a coherent API is ready. CI builds but
-never publishes. A future release workflow should use PyPI Trusted Publishing.
+The first stable release is planned as 1.0.0. Until release preparation is complete,
+package metadata remains at its development version and changelog entries remain
+Unreleased. Keep package metadata and `etrade_python.__version__` consistent when
+changing the version. After 1.0.0, reserve breaking public API changes for a major
+version and describe user-visible changes in CHANGELOG.md.
+
+Current CI validates and builds distributions; it does not publish. Publishing
+will be configured separately using PyPI Trusted Publishing.
 
 Contributions are licensed under Apache-2.0. Do not add personal account details,
-.env files, live recordings, credentials, or copyrighted reference fixtures.
+.env files, live recordings, or credentials. Document the origin and permissions
+for reused fixtures or examples; use synthetic data for new security scenarios.
