@@ -13,4 +13,9 @@
 - Add typed Portfolio and Transactions services with diagnostic CLI commands.
 - Track official endpoint coverage and reference research without overstating endpoint support.
 - Add offline tests, strict type checks, lint, coverage, and build CI.
-- Market, orders, and alerts services remain planned.
+- Add typed Market, Orders, and Alerts services.
+- Complete documented Portfolio, quote, and order response fields, including
+  mutual-fund details, extended-hours quotes, Greeks, and buying-power effects.
+  These fields now appear as typed attributes and in normal JSON serialization
+  instead of `broker_metadata`; unknown fields remain preserved there.
+- Accept both `quoteStatus` and the documented `quotestatus` portfolio spelling.
