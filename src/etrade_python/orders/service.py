@@ -167,7 +167,7 @@ def _normalize_required(value: str, label: str) -> str:
 
 
 def _normalize_order_id(order_id: int) -> int:
-    if isinstance(order_id, bool) or order_id < 1:
+    if type(order_id) is not int or order_id < 1:
         raise ETradeValidationError("order_id must be a positive integer")
     return order_id
 

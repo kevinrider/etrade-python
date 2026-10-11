@@ -3,15 +3,31 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from etrade_python._dates import parse_broker_datetime
+from etrade_python.orders.values import (
+    VALID_MARKET_SESSIONS,
+    VALID_ORDER_ACTIONS,
+    VALID_ORDER_TERMS,
+    VALID_ORDER_TYPES,
+    VALID_PRICE_TYPES,
+    VALID_QUANTITY_TYPES,
+    VALID_SECURITY_TYPES,
+)
 
 _CLIENT_ORDER_ID_RE = re.compile(r"^[A-Za-z0-9]{1,20}$")
+
+
+def _supported_value(value: str, allowed: frozenset[str], label: str) -> str:
+    normalized = value.strip().upper()
+    if normalized not in allowed:
+        raise ValueError(f"{label} must be one of: {', '.join(sorted(allowed))}")
+    return normalized
 
 
 class BrokerModel(BaseModel):
@@ -176,9 +192,49 @@ class OrderInstrumentRequest(BaseModel):
     @field_validator("quantity", "ordered_quantity", "reserve_quantity")
     @classmethod
     def positive_quantities(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and value < 0:
-            raise ValueError("Quantity values must be nonnegative")
+        if value is not None and (not value.is_finite() or value <= 0):
+            raise ValueError("Quantity values must be finite and positive")
         return value
+
+    @field_validator("order_action", "quantity_type")
+    @classmethod
+    def validate_supported_values(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None:
+            return None
+        allowed = VALID_ORDER_ACTIONS if info.field_name == "order_action" else VALID_QUANTITY_TYPES
+        return _supported_value(value, allowed, info.field_name or "value")
+
+    @field_validator("product")
+    @classmethod
+    def validate_product(cls, value: OrderProduct) -> OrderProduct:
+        if value.symbol is None or not value.symbol.strip():
+            raise ValueError("symbol is required")
+        if value.security_type is None:
+            raise ValueError("security_type is required")
+        security_type = _supported_value(value.security_type, VALID_SECURITY_TYPES, "security_type")
+        updates: dict[str, Any] = {
+            "symbol": value.symbol.strip().upper(),
+            "security_type": security_type,
+        }
+        if security_type == "OPTN":
+            if value.call_put is None:
+                raise ValueError("call_put is required for option instruments")
+            updates["call_put"] = _supported_value(
+                value.call_put, frozenset({"CALL", "PUT"}), "call_put"
+            )
+            if value.expiry_year is None or value.expiry_month is None or value.expiry_day is None:
+                raise ValueError("expiration is required for option instruments")
+            try:
+                date(value.expiry_year, value.expiry_month, value.expiry_day)
+            except ValueError:
+                raise ValueError("expiration must be a valid calendar date") from None
+            if (
+                value.strike_price is None
+                or not value.strike_price.is_finite()
+                or value.strike_price <= 0
+            ):
+                raise ValueError("strike_price must be finite and positive for option instruments")
+        return value.model_copy(update=updates)
 
 
 class OrderInstrument(BrokerModel):
@@ -290,6 +346,35 @@ class OrderDetailRequest(BaseModel):
             raise ValueError("A nonempty value is required")
         return normalized
 
+    @field_validator("price_type", "order_term", "market_session")
+    @classmethod
+    def validate_supported_values(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None:
+            return None
+        allowed = {
+            "price_type": VALID_PRICE_TYPES,
+            "order_term": VALID_ORDER_TERMS,
+            "market_session": VALID_MARKET_SESSIONS,
+        }
+        return _supported_value(value, allowed[info.field_name or ""], info.field_name or "value")
+
+    @field_validator("stop_price", mode="before")
+    @classmethod
+    def parse_stop_price(cls, value: object) -> object:
+        if value is None or value == "":
+            return value
+        try:
+            return Decimal(str(value))
+        except Exception:
+            raise ValueError("stop_price must be a decimal value") from None
+
+    @field_validator("limit_price", "stop_limit_price", "stop_price")
+    @classmethod
+    def finite_prices(cls, value: Decimal | str | None) -> Decimal | str | None:
+        if isinstance(value, Decimal) and not value.is_finite():
+            raise ValueError("Prices must be finite")
+        return value
+
     @field_validator("instruments", mode="before")
     @classmethod
     def normalize_instruments(cls, value: object) -> object:
@@ -310,8 +395,21 @@ class OrderDetailRequest(BaseModel):
         }:
             if self.limit_price is None:
                 raise ValueError("limit_price is required for limit price types")
+            if self.limit_price <= 0:
+                raise ValueError("limit_price must be positive")
         if self.price_type in {"STOP", "STOP_LIMIT"} and self.stop_price in (None, ""):
             raise ValueError("stop_price is required for stop price types")
+        if self.price_type in {"STOP", "STOP_LIMIT"}:
+            if not isinstance(self.stop_price, Decimal) or self.stop_price <= 0:
+                raise ValueError("stop_price must be positive")
+        if self.price_type == "STOP_LIMIT":
+            if self.limit_price is None and self.stop_limit_price is None:
+                raise ValueError("limit_price or stop_limit_price is required for STOP_LIMIT")
+            if any(
+                price is not None and price <= 0
+                for price in (self.limit_price, self.stop_limit_price)
+            ):
+                raise ValueError("STOP_LIMIT limit prices must be positive")
         if self.price_type == "MARKET" and self.limit_price is not None:
             raise ValueError("limit_price is not valid for MARKET orders")
         return self
@@ -511,24 +609,26 @@ class Order(BrokerModel):
 class PreviewId(BaseModel):
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    preview_id: int = Field(alias="previewId")
+    preview_id: int = Field(alias="previewId", strict=True, gt=0)
 
 
 class OrderId(BaseModel):
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    order_id: int = Field(alias="orderId")
+    order_id: int = Field(alias="orderId", strict=True, gt=0)
 
 
 class PreviewResponseId(PreviewId, BrokerModel):
     """Preview ID and broker margin designation; placement requests use PreviewId."""
 
+    preview_id: int = Field(alias="previewId")
     cash_margin: str | None = Field(default=None, alias="cashMargin")
 
 
 class OrderResponseId(OrderId, BrokerModel):
     """Order ID and margin designation returned by the broker."""
 
+    order_id: int = Field(alias="orderId")
     cash_margin: str | None = Field(default=None, alias="cashMargin")
 
 
@@ -648,9 +748,7 @@ class PreviewOrderRequest(BaseModel):
     @field_validator("order_type")
     @classmethod
     def normalize_order_type(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("A nonempty value is required")
-        return value.strip().upper()
+        return _supported_value(value, VALID_ORDER_TYPES, "order_type")
 
     @field_validator("client_order_id")
     @classmethod
@@ -701,6 +799,8 @@ class PlaceOrderRequest(PreviewOrderRequest):
     def validate_preview_ids(self) -> PlaceOrderRequest:
         if not self.preview_ids:
             raise ValueError("At least one preview ID is required")
+        for preview in self.preview_ids:
+            PreviewId.model_validate({"previewId": preview.preview_id})
         return self
 
     def request_body(self) -> dict[str, Any]:
@@ -711,7 +811,7 @@ class PlaceOrderRequest(PreviewOrderRequest):
 class CancelOrderRequest(BaseModel):
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    order_id: int = Field(alias="orderId", ge=1)
+    order_id: int = Field(alias="orderId", strict=True, ge=1)
 
     def request_body(self) -> dict[str, Any]:
         return {"CancelOrderRequest": self.model_dump(by_alias=True, mode="json")}

@@ -83,7 +83,7 @@ class AlertsService:
 
 
 def _normalize_alert_id(alert_id: int) -> int:
-    if isinstance(alert_id, bool) or alert_id < 1:
+    if type(alert_id) is not int or alert_id < 1:
         raise ETradeValidationError("alert_id must be a positive integer")
     return alert_id
 
@@ -93,7 +93,7 @@ def _normalize_alert_ids(alert_ids: Sequence[int] | int) -> list[int]:
         raise ETradeValidationError("alert_ids must be integers")
     if isinstance(alert_ids, int):
         return [_normalize_alert_id(alert_ids)]
-    if isinstance(alert_ids, (str, bytes)):
+    if isinstance(alert_ids, (str, bytes)) or not isinstance(cast(object, alert_ids), Sequence):
         raise ETradeValidationError("alert_ids must be integers")
     normalized = [_normalize_alert_id(alert_id) for alert_id in alert_ids]
     if not normalized:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import date
 from decimal import Decimal
-from typing import Any, Literal, TypeAlias, cast, get_args
+from typing import Any, Literal, TypeAlias, cast
 
 from etrade_python.orders.models import (
     Disclosure,
@@ -14,75 +14,50 @@ from etrade_python.orders.models import (
     PreviewId,
     PreviewOrderRequest,
 )
+from etrade_python.orders.values import (
+    VALID_MARKET_SESSIONS,
+    VALID_ORDER_ACTIONS,
+    VALID_ORDER_TERMS,
+    VALID_ORDER_TYPES,
+    VALID_PRICE_TYPES,
+    VALID_QUANTITY_TYPES,
+    VALID_SECURITY_TYPES,
+    MarketSession,
+    OrderAction,
+    OrderTerm,
+    OrderType,
+    PriceType,
+    QuantityType,
+    SecurityType,
+)
+
+__all__ = [
+    "QuantityType",
+    "OrderTerm",
+    "OrderType",
+    "PriceType",
+    "MarketSession",
+    "OrderAction",
+    "SecurityType",
+    "VALID_QUANTITY_TYPES",
+    "VALID_ORDER_TERMS",
+    "VALID_ORDER_TYPES",
+    "VALID_PRICE_TYPES",
+    "VALID_MARKET_SESSIONS",
+    "VALID_ORDER_ACTIONS",
+    "VALID_SECURITY_TYPES",
+    "OrderBuilder",
+    "NumberLike",
+    "PreviewIdInput",
+    "InstrumentInput",
+    "DisclosureInput",
+]
+
 
 NumberLike: TypeAlias = Decimal | int | str | float
 PreviewIdInput: TypeAlias = int | dict[str, int] | PreviewId
 InstrumentInput: TypeAlias = OrderInstrumentRequest | Mapping[str, Any]
 DisclosureInput: TypeAlias = Disclosure | Mapping[str, Any]
-
-QuantityType = Literal["QUANTITY", "DOLLAR", "ALL_I_OWN"]
-OrderTerm = Literal[
-    "GOOD_UNTIL_CANCEL",
-    "GOOD_FOR_DAY",
-    "GOOD_TILL_DATE",
-    "IMMEDIATE_OR_CANCEL",
-    "FILL_OR_KILL",
-]
-OrderType = Literal[
-    "EQ",
-    "OPTN",
-    "SPREADS",
-    "BUY_WRITES",
-    "BUTTERFLY",
-    "IRON_BUTTERFLY",
-    "CONDOR",
-    "IRON_CONDOR",
-    "MF",
-    "MMF",
-]
-PriceType = Literal[
-    "MARKET",
-    "LIMIT",
-    "STOP",
-    "STOP_LIMIT",
-    "TRAILING_STOP_CNST_BY_LOWER_TRIGGER",
-    "UPPER_TRIGGER_BY_TRAILING_STOP_CNST",
-    "TRAILING_STOP_PRCT_BY_LOWER_TRIGGER",
-    "UPPER_TRIGGER_BY_TRAILING_STOP_PRCT",
-    "TRAILING_STOP_CNST",
-    "TRAILING_STOP_PRCT",
-    "HIDDEN_STOP",
-    "HIDDEN_STOP_BY_LOWER_TRIGGER",
-    "UPPER_TRIGGER_BY_HIDDEN_STOP",
-    "NET_DEBIT",
-    "NET_CREDIT",
-    "NET_EVEN",
-    "MARKET_ON_OPEN",
-    "MARKET_ON_CLOSE",
-    "LIMIT_ON_OPEN",
-    "LIMIT_ON_CLOSE",
-]
-MarketSession = Literal["REGULAR", "EXTENDED"]
-OrderAction = Literal[
-    "BUY",
-    "SELL",
-    "BUY_TO_COVER",
-    "SELL_SHORT",
-    "BUY_OPEN",
-    "BUY_CLOSE",
-    "SELL_OPEN",
-    "SELL_CLOSE",
-    "EXCHANGE",
-]
-SecurityType = Literal["EQ", "OPTN", "MF", "MMF"]
-
-VALID_QUANTITY_TYPES = frozenset(get_args(QuantityType))
-VALID_ORDER_TERMS = frozenset(get_args(OrderTerm))
-VALID_ORDER_TYPES = frozenset(get_args(OrderType))
-VALID_PRICE_TYPES = frozenset(get_args(PriceType))
-VALID_MARKET_SESSIONS = frozenset(get_args(MarketSession))
-VALID_ORDER_ACTIONS = frozenset(get_args(OrderAction))
-VALID_SECURITY_TYPES = frozenset(get_args(SecurityType))
 
 
 class OrderBuilder:
@@ -128,7 +103,7 @@ class OrderBuilder:
         return self
 
     def order_id(self, order_id: int) -> OrderBuilder:
-        if isinstance(order_id, bool) or order_id < 1:
+        if type(order_id) is not int or order_id < 1:
             raise ValueError("order_id must be a positive integer")
         self._order_id = order_id
         return self
@@ -553,6 +528,7 @@ def _normalize_preview_ids(preview_ids: Sequence[PreviewIdInput]) -> list[Previe
     normalized: list[PreviewId] = []
     for preview_id in preview_ids:
         if isinstance(preview_id, PreviewId):
+            PreviewId.model_validate({"previewId": preview_id.preview_id})
             normalized.append(preview_id)
             continue
         if isinstance(preview_id, bool):
@@ -562,6 +538,8 @@ def _normalize_preview_ids(preview_ids: Sequence[PreviewIdInput]) -> list[Previe
                 raise ValueError("preview IDs must be positive integers")
             normalized.append(PreviewId(previewId=preview_id))
             continue
+        if not isinstance(cast(object, preview_id), Mapping):
+            raise ValueError("preview IDs must be positive integers")
         value = preview_id.get("previewId")
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError("preview IDs must be positive integers")
