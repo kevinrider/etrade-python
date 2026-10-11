@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Callable, Sequence
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -47,7 +47,13 @@ from etrade_python import (
     TransactionsRequest,
     TransactionsResponse,
 )
-from etrade_python.auth import AuthorizationUrl, MemoryCredentialStore, RequestToken, TokenStatus
+from etrade_python.auth import (
+    AuthorizationUrl,
+    MemoryCredentialStore,
+    RequestToken,
+    SessionManager,
+    TokenStatus,
+)
 from etrade_python.cli.app import app
 
 runner = CliRunner()
@@ -609,6 +615,65 @@ def test_auth_revoke_redirect_preserves_credentials(monkeypatch: pytest.MonkeyPa
     assert asyncio.run(stored_credentials()) == credentials
     assert len(seen) == 1
     assert seen[0].url.path == "/oauth/revoke_access_token"
+
+
+@pytest.mark.parametrize("status_code", [200, 302, 401, 500])
+def test_auth_renew_contacts_broker(monkeypatch: pytest.MonkeyPatch, status_code: int) -> None:
+    set_env(monkeypatch)
+    now = datetime(2026, 9, 26, 18, tzinfo=UTC)
+    credentials = ETradeCredentials(
+        access_token=SecretStr("fake-access-token"),
+        access_token_secret=SecretStr("fake-access-secret"),
+        acquired_at=now - timedelta(hours=1),
+        last_used_at=now - timedelta(minutes=1),
+    )
+    store = MemoryCredentialStore()
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(status_code, text="Access Token has been renewed")
+
+    def make_client(settings: ETradeSettings, *, profile: str) -> ETradeClient:
+        client = ETradeClient(
+            settings,
+            profile=profile,
+            credential_store=store,
+            http_transport=httpx.MockTransport(handler),
+        )
+        client.session = SessionManager(
+            settings=settings,
+            oauth_client=client.oauth,
+            credential_store=store,
+            profile=profile,
+            clock=lambda: now,
+        )
+        return client
+
+    async def stored_credentials(*, save: bool = False) -> ETradeCredentials | None:
+        async with make_client(ETradeSettings(), profile="manual") as client:
+            if save:
+                await client.session.save(credentials)
+            return await client.session.load()
+
+    monkeypatch.setattr(cli_app, "ETradeClient", make_client)
+    asyncio.run(stored_credentials(save=True))
+    result = runner.invoke(app, ["auth", "renew", "--profile", "manual"])
+
+    assert len(seen) == 1
+    assert seen[0].url.path == "/oauth/renew_access_token"
+    saved = asyncio.run(stored_credentials())
+    if status_code == 200:
+        assert result.exit_code == 0
+        assert "Credentials renewed for profile 'manual'." in result.output
+        assert saved is not None
+        assert saved.last_used_at == now
+        assert saved.renewed_at == now
+    else:
+        assert result.exit_code == 1
+        assert f"HTTP {status_code}" in result.output
+        assert "Credentials renewed" not in result.output
+        assert saved == credentials
 
 
 def test_accounts_list_human_output(monkeypatch: pytest.MonkeyPatch) -> None:

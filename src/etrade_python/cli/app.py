@@ -126,12 +126,12 @@ def status(profile: str = typer.Option("default", "--profile", "-p")) -> None:
 
 @auth_app.command("renew")
 def renew(profile: str = typer.Option("default", "--profile", "-p")) -> None:
-    """Renew inactive credentials when they are still same-day valid."""
+    """Explicitly renew same-day credentials with E*TRADE."""
 
     async def command() -> None:
         async with ETradeClient(_settings(), profile=profile) as client:
-            await client.session.ensure_active()
-            typer.echo(f"Credentials for profile '{profile}' are active.")
+            await client.session.renew()
+            typer.echo(f"Credentials renewed for profile '{profile}'.")
 
     _handle(command())
 

@@ -10,6 +10,7 @@ from etrade_python import (
     AuthorizationExpired,
     ETradeApiError,
     ETradeCredentials,
+    ETradeError,
     ETradeHttpAuthenticationError,
     ETradeSettings,
 )
@@ -23,6 +24,101 @@ def make_credentials(*, acquired_at: datetime, last_used_at: datetime) -> ETrade
         acquired_at=acquired_at,
         last_used_at=last_used_at,
     )
+
+
+@pytest.mark.parametrize("inactive_minutes", [1, 120])
+async def test_explicit_renewal_contacts_broker(
+    settings: ETradeSettings, inactive_minutes: int
+) -> None:
+    now = datetime(2026, 9, 26, 18, tzinfo=UTC)
+    completed_at = now + timedelta(seconds=5)
+    credentials = make_credentials(
+        acquired_at=now - timedelta(hours=3),
+        last_used_at=now - timedelta(minutes=inactive_minutes),
+    )
+    clock = now
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal clock
+        seen.append(request)
+        clock = completed_at
+        return httpx.Response(200, text="Access Token has been renewed")
+
+    async with OAuthClient(settings, http_transport=httpx.MockTransport(handler)) as oauth:
+        manager = SessionManager(
+            settings=settings,
+            oauth_client=oauth,
+            credential_store=MemoryCredentialStore(),
+            clock=lambda: clock,
+        )
+        await manager.save(credentials)
+        renewed = await manager.renew()
+        assert await manager.load() == renewed
+
+    assert len(seen) == 1
+    assert seen[0].url.path == "/oauth/renew_access_token"
+    assert renewed.acquired_at == credentials.acquired_at
+    assert renewed.access_token == credentials.access_token
+    assert renewed.access_token_secret == credentials.access_token_secret
+    assert renewed.last_used_at == completed_at
+    assert renewed.renewed_at == completed_at
+
+
+@pytest.mark.parametrize("expired", [False, True])
+async def test_explicit_renewal_rejects_missing_or_expired_credentials(
+    settings: ETradeSettings, expired: bool
+) -> None:
+    now = datetime(2026, 9, 27, 18, tzinfo=UTC)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("Missing or expired credentials must not reach the broker")
+
+    async with OAuthClient(settings, http_transport=httpx.MockTransport(handler)) as oauth:
+        manager = SessionManager(
+            settings=settings,
+            oauth_client=oauth,
+            credential_store=MemoryCredentialStore(),
+            clock=lambda: now,
+        )
+        credentials = None
+        if expired:
+            credentials = make_credentials(
+                acquired_at=now - timedelta(days=1), last_used_at=now - timedelta(days=1)
+            )
+            await manager.save(credentials)
+        with pytest.raises(AuthorizationExpired if expired else AuthenticationRequired):
+            await manager.renew()
+        assert await manager.load() == credentials
+
+
+@pytest.mark.parametrize("failure", ["redirect", "denied", "server", "network", "cancelled"])
+async def test_explicit_renewal_failure_preserves_credentials(
+    settings: ETradeSettings, failure: str
+) -> None:
+    now = datetime(2026, 9, 26, 18, tzinfo=UTC)
+    credentials = make_credentials(
+        acquired_at=now - timedelta(hours=1), last_used_at=now - timedelta(minutes=1)
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if failure == "network":
+            raise httpx.ConnectError("Fake connection failure", request=request)
+        if failure == "cancelled":
+            raise asyncio.CancelledError
+        return httpx.Response({"redirect": 302, "denied": 401, "server": 500}[failure])
+
+    async with OAuthClient(settings, http_transport=httpx.MockTransport(handler)) as oauth:
+        manager = SessionManager(
+            settings=settings,
+            oauth_client=oauth,
+            credential_store=MemoryCredentialStore(),
+            clock=lambda: now,
+        )
+        await manager.save(credentials)
+        with pytest.raises(asyncio.CancelledError if failure == "cancelled" else ETradeError):
+            await manager.renew()
+        assert await manager.load() == credentials
 
 
 async def test_session_statuses(settings: ETradeSettings) -> None:

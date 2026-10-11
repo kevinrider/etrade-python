@@ -63,10 +63,24 @@ class SessionManager:
                 updated = credentials.with_last_used(now)
                 await self.save(updated)
                 return updated
-            result = await self._oauth_client.renew_access_token(credentials)
-            renewed = result.credentials.with_renewal(self._now())
-            await self.save(renewed)
-            return renewed
+            return await self._renew(credentials)
+
+    async def renew(self) -> ETradeCredentials:
+        """Renew same-day credentials with the broker, even when locally active."""
+        async with self._renewal_lock:
+            credentials = await self.load()
+            if credentials is None:
+                raise AuthenticationRequired("E*TRADE authorization is required")
+            if self.status(credentials) is TokenStatus.EXPIRED:
+                raise AuthorizationExpired("E*TRADE authorization has expired")
+            return await self._renew(credentials)
+
+    async def _renew(self, credentials: ETradeCredentials) -> ETradeCredentials:
+        """Perform renewal while the caller holds the renewal lock."""
+        result = await self._oauth_client.renew_access_token(credentials)
+        renewed = result.credentials.with_renewal(self._now())
+        await self.save(renewed)
+        return renewed
 
     async def save(self, credentials: ETradeCredentials) -> None:
         await self._credential_store.save(self._storage_key, credentials)
