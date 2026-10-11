@@ -2,8 +2,8 @@
 
 `etrade-python` implements OAuth authentication and brokerage operations, including
 order placement, changes, and cancellation. Production mutations affect real
-brokerage accounts. The first stable release is planned as 1.0.0; until it is
-published, security fixes target the development branch.
+brokerage accounts. The current supported release series is 1.0.x. Security fixes
+will be released as updates to that series; use the latest available patch release.
 
 ## Reporting vulnerabilities
 

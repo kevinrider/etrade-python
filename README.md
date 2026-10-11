@@ -6,9 +6,6 @@ An unofficial, typed, async-first Python client for the E*TRADE REST API.
 management, and shared async networking for Python applications, CLIs, background
 workers, web services, workflow engines, and notebooks. Requires Python 3.11+.
 
-The package is prepared for its first stable release, **1.0.0**. The PyPI
-installation instructions below apply once the release is published.
-
 ## Features
 
 - Namespaced Accounts, Portfolio, Transactions, Market, Orders, and Alerts services.
@@ -26,16 +23,16 @@ inspection through Pydantic.
 
 ## Installation
 
-From a source checkout, install into an activated Python 3.11+ virtual environment:
-
-```sh
-python -m pip install .
-```
-
-Once published on PyPI:
+Install from PyPI into an activated Python 3.11+ virtual environment:
 
 ```sh
 python -m pip install etrade-python
+```
+
+Alternatively, install from a source checkout:
+
+```sh
+python -m pip install .
 ```
 
 The distribution name is `etrade-python`; the import package is `etrade_python`.
@@ -262,7 +259,7 @@ async def main() -> None:
 
 
 asyncio.run(main())
-```
+```pypi_tmp
 
 The limit price is illustrative, not a trading recommendation. Preview acceptance
 depends on the account and broker validations.
@@ -421,7 +418,7 @@ uv run python -m twine check dist/*
 CI checks Python 3.11–3.14, enforces at least 90% combined statement/branch coverage,
 and verifies wheel installation outside the checkout. Push and pull-request CI
 does not publish. A separate release workflow publishes stable GitHub releases
-using PyPI Trusted Publishing once the publisher is configured. See
+using PyPI Trusted Publishing. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and package verification instructions.
 
 ## API Coverage
