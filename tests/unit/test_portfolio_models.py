@@ -84,4 +84,5 @@ def test_portfolio_response_parses_nested_aliases_and_decimals() -> None:
     assert position.complete.ex_dividend_date == date(2026, 10, 2)
     assert position.position_lots[0].remaining_qty == Decimal("2")
     assert position.position_lots[0].acquired_date == date(2026, 10, 3)
-    assert position.broker_metadata == {"futureField": "kept"}
+    assert not hasattr(position, "futureField")
+    assert "futureField" not in position.model_dump(by_alias=True)

@@ -17,5 +17,8 @@
 - Complete documented Portfolio, quote, and order response fields, including
   mutual-fund details, extended-hours quotes, Greeks, and buying-power effects.
   These fields now appear as typed attributes and in normal JSON serialization
-  instead of `broker_metadata`; unknown fields remain preserved there.
+  instead of `broker_metadata`.
+- Remove `broker_metadata` from all API response models and their JSON schemas.
+  Unknown response fields are now discarded; callers must use explicitly typed
+  properties. Order-request extra-field support remains unchanged.
 - Accept both `quoteStatus` and the documented `quotestatus` portfolio spelling.

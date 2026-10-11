@@ -14,4 +14,4 @@ the official Portfolio, Quote, and Orders documentation reviewed on 2026-10-10.
 The matching `documented_model_samples.json` and complete response fixtures are
 synthetic examples covering those fields, not production recordings. They test
 field coverage, nested types, numeric/date conversion, and schema representation.
-Fields prefixed with `future` deliberately exercise unknown-field preservation.
+Fields prefixed with `future` deliberately exercise unknown-field discard behavior.

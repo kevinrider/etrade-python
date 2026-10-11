@@ -15,17 +15,9 @@ _CLIENT_ORDER_ID_RE = re.compile(r"^[A-Za-z0-9]{1,20}$")
 
 
 class BrokerModel(BaseModel):
-    """Base model that preserves unmodeled broker fields."""
+    """Base response model that discards unmodeled broker fields."""
 
-    model_config = ConfigDict(extra="allow", frozen=True, populate_by_name=True)
-
-    broker_metadata: dict[str, Any] = Field(default_factory=dict)
-
-    def model_post_init(self, __context: Any) -> None:
-        extra = cast(dict[str, Any], getattr(self, "__pydantic_extra__", None) or {})
-        if extra:
-            object.__setattr__(self, "broker_metadata", {**self.broker_metadata, **extra})
-            object.__setattr__(self, "__pydantic_extra__", {})
+    model_config = ConfigDict(extra="ignore", frozen=True, populate_by_name=True)
 
 
 def _strip_broker_metadata(value: object) -> object:

@@ -11,7 +11,7 @@ from etrade_python import (
 )
 
 
-def test_account_preserves_broker_metadata() -> None:
+def test_account_discards_unknown_fields() -> None:
     account = Account.model_validate(
         {
             "accountId": "123456",
@@ -25,7 +25,8 @@ def test_account_preserves_broker_metadata() -> None:
     assert account.account_id == "123456"
     assert account.account_id_key == "fake-key"
     assert account.account_mode == "MARGIN"
-    assert account.broker_metadata == {"futureField": "kept"}
+    assert not hasattr(account, "futureField")
+    assert "futureField" not in account.model_dump(by_alias=True)
     assert "futureField" not in account.model_dump()
 
 
@@ -97,4 +98,5 @@ def test_account_balance_decimal_and_nested_models() -> None:
     assert balance.lending is not None
     assert balance.lending.payment_due_date == date(2026, 10, 4)
     assert balance.lending.last_payment_received_date == date(2026, 10, 1)
-    assert balance.broker_metadata == {"futureBalanceField": "kept"}
+    assert not hasattr(balance, "futureBalanceField")
+    assert "futureBalanceField" not in balance.model_dump(by_alias=True)

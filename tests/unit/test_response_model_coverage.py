@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, cast
+from typing import cast
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -85,17 +85,17 @@ _ALIASES: dict[tuple[str, str], dict[str, str]] = {
 }
 
 
-def assert_only_unknown_metadata(value: object) -> None:
-    """Known fixture fields must be consumed at every nesting level."""
+def assert_only_modeled_fields(value: object) -> None:
+    """Response models must expose only declared fields at every nesting level."""
     if isinstance(value, BaseModel):
-        metadata = cast(dict[str, Any], getattr(value, "broker_metadata", {}))
-        assert all(key.startswith("future") for key in metadata), metadata
+        assert not hasattr(value, "broker_metadata")
+        assert not value.model_extra
+        assert "broker_metadata" not in type(value).model_json_schema()["properties"]
         for name in type(value).model_fields:
-            if name != "broker_metadata":
-                assert_only_unknown_metadata(getattr(value, name))
+            assert_only_modeled_fields(getattr(value, name))
     elif isinstance(value, list):
         for item in cast(list[object], value):
-            assert_only_unknown_metadata(item)
+            assert_only_modeled_fields(item)
 
 
 @pytest.mark.parametrize("domain, documented_model", list(_MODELS))
@@ -106,8 +106,15 @@ def test_documented_response_fields_are_typed_and_in_schema(
     inventory = load_json_fixture("documented_response_fields.json")
     samples = load_json_fixture("responses/documented_model_samples.json")
     model_type = _MODELS[(domain, documented_model)]
-    instance = model_type.model_validate(samples[domain][documented_model])
-    assert_only_unknown_metadata(instance)
+    payload = {
+        **samples[domain][documented_model],
+        "futureResponseField": "discarded",
+        "broker_metadata": {"legacyField": "discarded"},
+    }
+    instance = model_type.model_validate(payload)
+    assert not hasattr(instance, "futureResponseField")
+    assert "futureResponseField" not in instance.model_dump(by_alias=True)
+    assert_only_modeled_fields(instance)
     schema = model_type.model_json_schema(by_alias=True)
     aliases = _ALIASES.get((domain, documented_model), {})
     fields = {field.alias or name: name for name, field in model_type.model_fields.items()}
@@ -140,7 +147,7 @@ def test_optional_response_fields_have_safe_defaults(domain: str, documented_mod
             model_type.model_validate({})
         return
     instance = model_type.model_validate({})
-    assert_only_unknown_metadata(instance)
+    assert_only_modeled_fields(instance)
 
 
 @pytest.mark.parametrize("spelling", ["quotestatus", "quoteStatus", "both"])
@@ -153,7 +160,7 @@ def test_portfolio_quote_status_aliases(spelling: str) -> None:
         sample["quoteStatus"] = "REALTIME"
     position = portfolio.Position.model_validate(sample)
     assert position.quote_status == ("DELAYED" if spelling == "quotestatus" else "REALTIME")
-    assert position.broker_metadata == {}
+    assert not hasattr(position, "broker_metadata")
     assert position.model_dump(by_alias=True)["quoteStatus"] == position.quote_status
 
 
@@ -177,7 +184,7 @@ def test_quote_nested_aliases(capitalized: bool) -> None:
         for source in ("frontEndValues", "salesValues"):
             fund["Redemption"][source[0].upper() + source[1:]] = fund["Redemption"].pop(source)
     response = market.QuotesResponse.model_validate(sample)
-    assert_only_unknown_metadata(response)
+    assert_only_modeled_fields(response)
     assert isinstance(response.quotes[0].mutual_fund, market.QuoteDetails)
 
 
@@ -223,7 +230,7 @@ def test_quote_collection_shapes(shape: str) -> None:
     message_value = message if shape in {"wrapper", "wrapper-list"} else shaped(message, "unused")
     messages = market.QuoteMessages.model_validate({"Message": message_value})
     assert len(messages.messages) == expected_count
-    assert_only_unknown_metadata(fund)
+    assert_only_modeled_fields(fund)
 
 
 @pytest.mark.parametrize("capitalized", [False, True])
@@ -256,7 +263,7 @@ def test_order_response_nested_aliases(capitalized: bool) -> None:
                     sample["CashBpDetails"][field[0].upper() + field[1:]] = sample[
                         "CashBpDetails"
                     ].pop(field)
-        assert_only_unknown_metadata(model_type.model_validate(sample))
+        assert_only_modeled_fields(model_type.model_validate(sample))
 
 
 @pytest.mark.parametrize(
@@ -282,7 +289,7 @@ def test_order_response_id_collection_shapes(shape: str) -> None:
         assert len(ids) == (0 if shape in {"null", "empty"} else 1)
         if ids:
             assert getattr(ids[0], "preview_id" if key == "previewId" else "order_id") == 7
-        assert_only_unknown_metadata(instance)
+        assert_only_modeled_fields(instance)
 
 
 @pytest.mark.parametrize(
@@ -335,7 +342,7 @@ def test_order_responses_accept_existing_model_instances() -> None:
     assert placed.order_ids[0].order_id == 7
 
 
-def test_response_ids_preserve_unknown_fields() -> None:
+def test_response_ids_discard_unknown_fields() -> None:
     preview = orders.PreviewResponseId.model_validate(
         {
             "previewId": 7,
@@ -350,7 +357,9 @@ def test_response_ids_preserve_unknown_fields() -> None:
             "futureOrderIdField": "preserved",
         }
     )
-    assert preview.broker_metadata == {"futurePreviewField": "preserved"}
-    assert order.broker_metadata == {"futureOrderIdField": "preserved"}
-    assert_only_unknown_metadata(preview)
-    assert_only_unknown_metadata(order)
+    assert not hasattr(preview, "futurePreviewField")
+    assert "futurePreviewField" not in preview.model_dump(by_alias=True)
+    assert not hasattr(order, "futureOrderIdField")
+    assert "futureOrderIdField" not in order.model_dump(by_alias=True)
+    assert_only_modeled_fields(preview)
+    assert_only_modeled_fields(order)

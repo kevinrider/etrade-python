@@ -20,8 +20,8 @@ def test_transactions_response_parses_continuation_fields() -> None:
     assert response.next == payload["next"]
     assert response.page_markers == payload["pageMarkers"]
     assert response.marker != response.page_markers
-    assert "marker" not in response.broker_metadata
-    assert "next" not in response.broker_metadata
+    assert response.model_dump()["marker"] == response.marker
+    assert response.model_dump()["next"] == response.next
 
 
 def test_transactions_request_query_params() -> None:
@@ -97,7 +97,8 @@ def test_transactions_response_parses_nested_aliases_and_decimals() -> None:
     assert transaction.brokerage.price == Decimal("100.50")
     assert transaction.brokerage.product is not None
     assert transaction.brokerage.product.symbol == "MSFT"
-    assert transaction.broker_metadata == {"futureField": "kept"}
+    assert not hasattr(transaction, "futureField")
+    assert "futureField" not in transaction.model_dump(by_alias=True)
 
 
 def test_transaction_details_response_wraps_transaction_payload() -> None:

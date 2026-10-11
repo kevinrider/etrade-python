@@ -32,7 +32,8 @@ async def test_complete_portfolio_response(
     position = response.account_portfolios[0].positions[0]
     assert position.quote_status == "REALTIME"
     assert position.today_commissions == Decimal("12.345")
-    assert position.broker_metadata == {"futurePositionField": "preserved"}
+    assert not hasattr(position, "futurePositionField")
+    assert "futurePositionField" not in position.model_dump(by_alias=True)
     complete = position.complete
     assert complete is not None
     assert complete.gamma == Decimal("12.345")
@@ -40,7 +41,8 @@ async def test_complete_portfolio_response(
     assert complete.bid_size == 7
     assert complete.options_adjusted_flag is True
     assert complete.div_pay_date == date(2018, 3, 21)
-    assert complete.broker_metadata == {"futureCompleteField": "preserved"}
+    assert not hasattr(complete, "futureCompleteField")
+    assert "futureCompleteField" not in complete.model_dump(by_alias=True)
     serialized = response.model_dump(mode="json", by_alias=True)
     assert serialized["accountPortfolio"][0]["position"][0]["complete"]["gamma"] == "12.345"
 
@@ -58,7 +60,8 @@ async def test_complete_quote_response(settings: ETradeSettings, auth: FakeAuthe
         response = await client.market.get_quotes(["EXAMPLE"])
 
     quote = response.quotes[0]
-    assert quote.broker_metadata == {"futureQuoteField": "preserved"}
+    assert not hasattr(quote, "futureQuoteField")
+    assert "futureQuoteField" not in quote.model_dump(by_alias=True)
     assert response.messages is not None
     assert response.messages.messages[0].code == 0
     assert quote.all is not None
@@ -75,10 +78,12 @@ async def test_complete_quote_response(settings: ETradeSettings, auth: FakeAuthe
     assert fund.initial_investment == Decimal("12.345")
     assert fund.order_cutoff_time == datetime(2018, 3, 21, 18, 40, tzinfo=UTC)
     assert fund.performance_as_of_date == datetime(2018, 3, 21, tzinfo=UTC)
-    assert fund.broker_metadata == {"futureFundField": "preserved"}
+    assert not hasattr(fund, "futureFundField")
+    assert "futureFundField" not in fund.model_dump(by_alias=True)
     assert fund.net_assets is not None
     assert fund.net_assets.value == Decimal("12.345")
-    assert fund.net_assets.broker_metadata == {"futureAssetField": "preserved"}
+    assert not hasattr(fund.net_assets, "futureAssetField")
+    assert "futureAssetField" not in fund.net_assets.model_dump(by_alias=True)
     assert fund.redemption is not None
     assert fund.redemption.sales_values[0].percent == "example"
     assert fund.front_end_sales_charges[0].percent == "example"
@@ -120,14 +125,16 @@ async def test_complete_order_responses(settings: ETradeSettings, auth: FakeAuth
     assert preview.cash_bp_details.settled.net_bp == Decimal("12.345")
     assert preview.margin_bp_details is not None
     assert preview.margin_bp_details.marginable is not None
-    assert preview.margin_bp_details.marginable.broker_metadata == {
-        "futureBuyingPowerField": "preserved"
-    }
+    assert not hasattr(preview.margin_bp_details.marginable, "futureBuyingPowerField")
+    assert "futureBuyingPowerField" not in preview.margin_bp_details.marginable.model_dump(
+        by_alias=True
+    )
     assert preview.dt_bp_details is not None
     assert preview.dt_bp_details.non_marginable is not None
     assert preview.dt_bp_details.non_marginable.current_order_impact == Decimal("12.345")
     assert preview.preview_ids[0].cash_margin == "example"
-    assert preview.broker_metadata == {"futureOrderField": "preserved"}
+    assert not hasattr(preview, "futureOrderField")
+    assert "futureOrderField" not in preview.model_dump(by_alias=True)
     assert placed.total_order_value == Decimal("12.345")
     assert placed.commission_msg == "example"
     assert placed.message_list is not None
@@ -136,6 +143,7 @@ async def test_complete_order_responses(settings: ETradeSettings, auth: FakeAuth
     assert placed.disclosure.ah_disclosure_flag is True
     assert placed.order_ids[0].cash_margin == "example"
     assert placed.orders[0].instruments[0].mf_transaction == "example"
-    assert placed.broker_metadata == {"futureOrderField": "preserved"}
+    assert not hasattr(placed, "futureOrderField")
+    assert "futureOrderField" not in placed.model_dump(by_alias=True)
     serialized = preview.model_dump(mode="json", by_alias=True)
     assert serialized["cashBpDetails"]["settled"]["netBp"] == "12.345"
