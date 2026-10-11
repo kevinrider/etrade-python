@@ -6,9 +6,8 @@ An unofficial, typed, async-first Python client for the E*TRADE REST API.
 management, and shared async networking for Python applications, CLIs, background
 workers, web services, workflow engines, and notebooks. Requires Python 3.11+.
 
-The first stable release, **1.0.0**, is being prepared. The package currently uses
-a development version; the PyPI installation instructions below apply once the
-release is published.
+The package is prepared for its first stable release, **1.0.0**. The PyPI
+installation instructions below apply once the release is published.
 
 ## Features
 
@@ -256,13 +255,9 @@ async def main() -> None:
         builder = (
             OrderBuilder.for_account(account_id_key)
             .client_order_id(uuid4().hex[:20])
-            .equity_limit(
-                "AAPL", action="BUY", quantity=1, limit_price=Decimal("1.00")
-            )
+            .equity_limit("AAPL", action="BUY", quantity=1, limit_price=Decimal("1.00"))
         )
-        preview = await client.orders.preview(
-            account_id_key, builder.build_preview_request()
-        )
+        preview = await client.orders.preview(account_id_key, builder.build_preview_request())
         print(preview.model_dump_json(indent=2))
 
 
@@ -424,9 +419,10 @@ uv run python -m twine check dist/*
 ```
 
 CI checks Python 3.11–3.14, enforces at least 90% combined statement/branch coverage,
-and verifies wheel installation outside the checkout. CI currently builds but
-does not publish. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and package
-verification instructions.
+and verifies wheel installation outside the checkout. Push and pull-request CI
+does not publish. A separate release workflow publishes stable GitHub releases
+using PyPI Trusted Publishing once the publisher is configured. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for contribution and package verification instructions.
 
 ## API Coverage
 

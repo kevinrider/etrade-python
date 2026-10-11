@@ -1,5 +1,6 @@
 """Unofficial async E*TRADE client."""
 
+from etrade_python._version import __version__ as __version__
 from etrade_python.accounts import (
     Account,
     AccountBalanceRequest,
@@ -138,7 +139,6 @@ from etrade_python.transactions import (
     TransactionsService,
 )
 
-__version__ = "0.1.0.dev0"
 __all__ = [
     "PreviewResponseId",
     "OrderResponseId",

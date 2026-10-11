@@ -23,6 +23,8 @@
   and operational logging without credentials or signed headers.
 - Offline unit and HTTP contract tests, lint and type checks, coverage enforcement,
   wheel/source builds, and CI across Python 3.11–3.14.
+- Stable-release workflow with version/tag checks, clean distribution installation
+  checks, and PyPI Trusted Publishing through the GitHub `pypi` environment.
 
 ### Fixed
 

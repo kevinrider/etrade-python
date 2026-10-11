@@ -46,6 +46,7 @@ from etrade_python import (
     TransactionDetailsResponse,
     TransactionsRequest,
     TransactionsResponse,
+    __version__,
 )
 from etrade_python.auth import (
     AuthorizationUrl,
@@ -551,7 +552,7 @@ def set_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_cli_version() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0.dev0" in result.output
+    assert result.output.strip() == __version__
 
 
 def test_auth_status(monkeypatch: pytest.MonkeyPatch) -> None:

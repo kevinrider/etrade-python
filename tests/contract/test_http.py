@@ -15,6 +15,7 @@ from etrade_python import (
     ETradeSettings,
     ETradeTransportError,
     ETradeValidationError,
+    __version__,
 )
 from etrade_python.transport import ApiTransport, RetryPolicy, RetrySafety
 from etrade_python.transport.http import HttpMethod
@@ -28,6 +29,7 @@ async def test_request_contract(settings: ETradeSettings, auth: FakeAuthenticato
         assert request.url.path == "/v1/example.json"
         assert request.url.params == httpx.QueryParams({"q": "a & b", "flag": "true"})
         assert request.headers["Accept"] == "application/json"
+        assert request.headers["User-Agent"] == f"etrade-python/{__version__}"
         assert request.headers["Content-Type"] == "application/json"
         assert request.headers["Authorization"].startswith("OAuth ")
         assert request.content == b'{"amount": "1.234567890123456789"}'

@@ -61,14 +61,6 @@ uv pip install --python "$wheel_check_dir/bin/python" dist/*.whl
 (cd /tmp && "$wheel_check_dir/bin/etrade" --version)
 ```
 
-The first stable release is planned as 1.0.0. Until release preparation is complete,
-package metadata remains at its development version and changelog entries remain
-Unreleased. Keep package metadata and `etrade_python.__version__` consistent when
-changing the version. After 1.0.0, reserve breaking public API changes for a major
-version and describe user-visible changes in CHANGELOG.md.
-
-Current CI validates and builds distributions; it does not publish. Publishing
-will be configured separately using PyPI Trusted Publishing.
 
 Contributions are licensed under Apache-2.0. Do not add personal account details,
 .env files, live recordings, or credentials. Document the origin and permissions

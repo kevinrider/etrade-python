@@ -12,6 +12,7 @@ from urllib.parse import unquote
 
 import httpx
 
+from etrade_python._version import __version__
 from etrade_python.config import ETradeSettings
 from etrade_python.exceptions import (
     AuthenticationRequired,
@@ -119,7 +120,7 @@ class ApiTransport:
             )
         except (ValueError, TypeError, RecursionError):
             raise ETradeValidationError("Invalid JSON request body") from None
-        headers = {"Accept": "application/json", "User-Agent": "etrade-python/0.1.0.dev0"}
+        headers = {"Accept": "application/json", "User-Agent": f"etrade-python/{__version__}"}
         if content is not None:
             headers["Content-Type"] = "application/json"
         url = self._settings.environment.api_base_url + path

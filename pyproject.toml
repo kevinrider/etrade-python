@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "etrade-python"
-version = "0.1.0.dev0"
+version = "1.0.0"
 description = "An unofficial, typed, async-first E*TRADE API client"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{name = "etrade-python contributors"}]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
@@ -28,6 +28,11 @@ dependencies = [
   "pydantic-settings>=2.7,<3",
   "typer>=0.20,<1",
 ]
+
+[project.urls]
+Repository = "https://github.com/kevinrider/etrade-python"
+Issues = "https://github.com/kevinrider/etrade-python/issues"
+Changelog = "https://github.com/kevinrider/etrade-python/blob/main/CHANGELOG.md"
 
 [project.scripts]
 etrade = "etrade_python.cli.app:app"
