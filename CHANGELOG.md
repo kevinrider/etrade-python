@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0 — Unreleased
+
+### Added
+
+- Optional public `CoordinatedCredentialStore` transaction-lock protocol and
+  `CredentialCoordinationError` for sanitized coordination failures.
+- Cross-process OS-backed namespace locks in `KeyringCredentialStore`, with a
+  configurable directory and acquisition timeout, and shared-instance locks in
+  `MemoryCredentialStore`. Credentials and namespace formats remain compatible.
+- Public `SessionManager.revoke()` coordinating broker revocation and local
+  deletion; the existing auth CLI now uses it.
+- Offline subprocess tests using fake shared keyring storage and mocked OAuth.
+
+### Fixed
+
+- Serialize complete lifecycle transactions across cooperating processes, reload
+  credentials under the lock, and preserve newer usage/renewal timestamps when
+  saving the same credentials. Late usage callbacks cannot restore deleted or
+  replaced credentials.
+- Wait for cancelled keyring workers before releasing transaction ownership,
+  including cancellation of pending tasks during event-loop shutdown.
+  Retain credential-free lock files to prevent lock identity replacement races.
+
 ## 1.0.0 — 2026-10-11
 
 ### Added

@@ -48,6 +48,14 @@ in ordinary CI.
 Test pagination, validation, credential redaction, and retry behavior when changing
 those features. Order mutations must not acquire automatic retries.
 
+Credential lifecycle changes must also test independent session managers and
+actual subprocess contention. Use synthetic keyring backends and HTTPX
+MockTransport; subprocess tests must not access the system keyring or broker.
+Cover replacement/deletion, monotonic timestamps, renewal/revocation, cancellation
+during keyring workers, lock timeouts, namespace isolation, and process-exit lock
+release. A lock must cover the full read/check/update transaction. Report offline
+verification separately from authenticated broker validation.
+
 ## Package verification and releases
 
 After `make package-check`, verify installation outside the source checkout in a

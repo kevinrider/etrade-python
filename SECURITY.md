@@ -2,8 +2,8 @@
 
 `etrade-python` implements OAuth authentication and brokerage operations, including
 order placement, changes, and cancellation. Production mutations affect real
-brokerage accounts. The current supported release series is 1.0.x. Security fixes
-will be released as updates to that series; use the latest available patch release.
+brokerage accounts. Version 1.1.0 is in development; the published release series
+remains 1.0.x until a release is published. Use the latest available patch release.
 
 ## Reporting vulnerabilities
 
@@ -31,9 +31,24 @@ A dedicated security contact has not yet been published.
   Completed HTTP 2xx exchanges do, even if later payload parsing fails. Failed or
   cancelled exchanges do not. Explicit renewal contacts the broker, and timestamps
   are persisted only after successful renewal.
-- Updates within a session manager are serialized and preserve newer timestamps.
-  Late responses do not restore deleted or replaced credentials. Custom stores
-  used across multiple processes must provide their own concurrency guarantees.
+- In 1.1.0, built-in keyring session updates are coordinated across cooperating
+  processes and preserve newer timestamps. Late usage updates do not restore
+  deleted or replaced credentials. Namespace locks cover complete lifecycle
+  transactions, including broker renewal and revocation, rather than brokerage
+  HTTP calls. Existing custom stores remain compatible but must implement the
+  optional `CoordinatedCredentialStore` contract for shared-store coordination.
+  Old clients and direct store writes bypass these guarantees.
+- Lock files contain no credentials and use hashed namespace/service identities.
+  All cooperating processes must use the same per-user lock directory on a local
+  filesystem supporting OS locks. Private directories and files are used; existing
+  custom directory permissions are the caller's responsibility. Do not delete
+  lock files or clear the directory while clients are running. No soft-lock or
+  unlocked fallback is allowed. OS lock ownership is released on process exit.
+- Keyring worker cancellation is deferred until the worker completes so a late
+  write cannot run after transaction ownership is released. A blocked keyring can
+  delay cancellation. A process crash or lost OAuth response still leaves broker
+  outcomes uncertain; locks do not provide crash-atomic broker/keyring changes.
+  Revocation cannot recall already signed or dispatched requests.
   If usage persistence fails after a successful API exchange, the library logs a
   sanitized warning and preserves the broker response without retrying it.
 

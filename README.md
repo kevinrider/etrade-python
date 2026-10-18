@@ -113,6 +113,11 @@ contacts the broker even when the token appears active locally.
 
 `auth status` reports a local lifecycle estimate, not broker verification.
 
+`await client.session.revoke()` coordinates broker revocation and local deletion.
+The CLI's `etrade auth revoke` uses this method. Missing credentials are a no-op;
+broker failure preserves the local credentials. Revocation cannot recall an
+already signed or dispatched brokerage request.
+
 ## Accounts and Portfolio
 
 After logging in with the CLI, save this as a Python script and run it with the
@@ -346,6 +351,60 @@ process exits. Use `client.oauth.get_request_token()`,
 application-managed authorization, then `await client.session.save(credentials)`.
 Always close the client after use. Applications can implement the async
 `CredentialStore` protocol for other persistence systems.
+
+### Sharing a profile across local processes
+
+Starting in 1.1.0, session lifecycle operations use namespace transaction locks
+when the store implements `CoordinatedCredentialStore`. The built-in keyring store
+coordinates cooperating SDK/CLI processes using OS-backed file locks. The keyring
+credential format and existing environment/consumer-key/profile namespaces are
+unchanged. Ordinary brokerage HTTP requests remain concurrent; only lifecycle
+transactions are serialized. Automatic inactivity renewal reloads the stored
+credentials after locking, avoiding duplicate renewal by waiting processes.
+Explicit `session.renew()` still contacts the broker on every invocation.
+
+Lock files contain no credentials. They use hashed keyring-service and namespace
+identities in the per-user cache directory `etrade-python/credential-locks` selected
+by platformdirs. Files remain after release to preserve lock identity; OS ownership
+is released when a process exits. Do not delete lock files or clear this cache
+while cooperating processes are running. Use a local filesystem supporting OS
+locks, the same OS user, and the same lock directory for all cooperating processes.
+Older clients and direct uncoordinated store access do not participate.
+
+The keyring lock acquisition timeout defaults to 60 seconds. A timeout, unsupported
+locking, or filesystem failure raises `CredentialCoordinationError` without
+credential/namespace/path details. To configure storage coordination explicitly:
+
+```python
+from pathlib import Path
+from etrade_python import ETradeClient, ETradeSettings, KeyringCredentialStore
+
+store = KeyringCredentialStore(
+    lock_directory=Path("/private/local/path/credential-locks"),
+    lock_timeout_seconds=30,
+)
+client = ETradeClient(ETradeSettings(), credential_store=store, profile="personal")
+```
+
+Every process sharing those credentials must use that same configuration. The
+existing CLI uses the default lock directory. The directory is created on first
+use, with private permissions on POSIX; provision custom directories with
+appropriate access controls. No plaintext credential fallback is introduced.
+
+`MemoryCredentialStore` coordinates managers sharing one store instance within
+one event loop. Existing custom stores implementing only `CredentialStore` remain
+compatible with the earlier per-manager locking guarantee. Custom stores can add
+`lock(namespace) -> AbstractAsyncContextManager[None]` to implement the exported
+`CoordinatedCredentialStore` protocol. Hold that lock across the complete
+read/check/update operation; its `load`, `save`, and `delete` methods must not
+reacquire the non-reentrant lock. Direct store users must explicitly acquire the
+lock themselves. Distributed stores must provide their own appropriate locking.
+
+Cancelled keyring operations finish their worker before releasing transaction
+ownership. This can delay cancellation if the keyring backend is blocked. A process
+crash releases OS lock ownership but does not prove the outcome of an interrupted
+broker renewal or revocation. Recheck/re-authorize as necessary; this mechanism
+does not journal OAuth operations or prevent duplicate trading submissions.
 
 ## Diagnostic CLI and Orders Demo
 
