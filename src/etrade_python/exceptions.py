@@ -9,6 +9,10 @@ class ETradeAuthenticationError(ETradeError):
     """Authentication failed or is unavailable."""
 
 
+class CredentialCoordinationError(ETradeAuthenticationError):
+    """Credential transaction ownership could not be obtained or released."""
+
+
 class AuthenticationRequired(ETradeAuthenticationError):
     """Human authorization or an authentication provider is required."""
 

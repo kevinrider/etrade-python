@@ -10,6 +10,7 @@ from etrade_python.auth.credentials import (
 from etrade_python.auth.oauth import OAuthClient
 from etrade_python.auth.session import SessionAuthenticator, SessionManager, TokenStatus
 from etrade_python.auth.stores import (
+    CoordinatedCredentialStore,
     CredentialStore,
     KeyringCredentialStore,
     MemoryCredentialStore,
@@ -17,6 +18,7 @@ from etrade_python.auth.stores import (
 
 __all__ = [
     "AuthorizationUrl",
+    "CoordinatedCredentialStore",
     "CredentialStore",
     "ETradeCredentials",
     "KeyringCredentialStore",

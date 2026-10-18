@@ -142,10 +142,7 @@ def revoke(profile: str = typer.Option("default", "--profile", "-p")) -> None:
 
     async def command() -> None:
         async with ETradeClient(_settings(), profile=profile) as client:
-            credentials = await client.session.load()
-            if credentials is not None:
-                await client.oauth.revoke_access_token(credentials)
-            await client.session.delete()
+            await client.session.revoke()
             typer.echo(f"Credentials removed for profile '{profile}'.")
 
     _handle(command())

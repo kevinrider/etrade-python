@@ -20,6 +20,7 @@ from etrade_python.alerts import (
 )
 from etrade_python.auth import (
     AuthorizationUrl,
+    CoordinatedCredentialStore,
     CredentialStore,
     ETradeCredentials,
     KeyringCredentialStore,
@@ -38,6 +39,7 @@ from etrade_python.enums import Environment
 from etrade_python.exceptions import (
     AuthenticationRequired,
     AuthorizationExpired,
+    CredentialCoordinationError,
     ETradeApiError,
     ETradeAuthenticationError,
     ETradeError,
@@ -201,6 +203,7 @@ __all__ = [
     "CancelOrderResponse",
     "CancelOrderRequest",
     "AuthenticationRequired",
+    "CredentialCoordinationError",
     "Account",
     "AccountBalanceRequest",
     "AccountBalanceResponse",
@@ -208,6 +211,7 @@ __all__ = [
     "AccountsService",
     "AuthorizationUrl",
     "AuthorizationExpired",
+    "CoordinatedCredentialStore",
     "CredentialStore",
     "ETradeApiError",
     "ETradeAuthenticationError",

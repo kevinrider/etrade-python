@@ -2,7 +2,8 @@
 
 import asyncio
 import hashlib
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from zoneinfo import ZoneInfo
@@ -11,7 +12,7 @@ import httpx
 
 from etrade_python.auth.credentials import ETradeCredentials
 from etrade_python.auth.oauth import OAuthClient
-from etrade_python.auth.stores.base import CredentialStore
+from etrade_python.auth.stores.base import CoordinatedCredentialStore, CredentialStore
 from etrade_python.config import ETradeSettings
 from etrade_python.exceptions import AuthenticationRequired, AuthorizationExpired
 
@@ -48,10 +49,23 @@ class SessionManager:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._renewal_lock = asyncio.Lock()
 
-    async def ensure_active(self) -> ETradeCredentials:
+    @asynccontextmanager
+    async def _transaction(self) -> AsyncGenerator[None]:
         async with self._renewal_lock:
+            if isinstance(self._credential_store, CoordinatedCredentialStore):
+                async with self._credential_store.lock(self._storage_key):
+                    yield
+            else:
+                # Preserve the original contract for existing custom stores.
+                yield
+
+    async def _load(self) -> ETradeCredentials | None:
+        return await self._credential_store.load(self._storage_key)
+
+    async def ensure_active(self) -> ETradeCredentials:
+        async with self._transaction():
             now = self._now()
-            credentials = await self.load()
+            credentials = await self._load()
             status = self.status(credentials, now=now)
             if status is TokenStatus.MISSING:
                 raise AuthenticationRequired("E*TRADE authorization is required")
@@ -65,8 +79,8 @@ class SessionManager:
 
     async def renew(self) -> ETradeCredentials:
         """Renew same-day credentials with the broker, even when locally active."""
-        async with self._renewal_lock:
-            credentials = await self.load()
+        async with self._transaction():
+            credentials = await self._load()
             if credentials is None:
                 raise AuthenticationRequired("E*TRADE authorization is required")
             if self.status(credentials) is TokenStatus.EXPIRED:
@@ -76,34 +90,56 @@ class SessionManager:
     async def _renew(self, credentials: ETradeCredentials) -> ETradeCredentials:
         """Perform renewal while the caller holds the renewal lock."""
         result = await self._oauth_client.renew_access_token(credentials)
-        renewed = result.credentials.with_renewal(self._now())
+        renewed = result.credentials.with_renewal(max(self._now(), credentials.last_used_at))
+        if credentials.renewed_at is not None and (
+            renewed.renewed_at is None or credentials.renewed_at > renewed.renewed_at
+        ):
+            renewed = renewed.model_copy(update={"renewed_at": credentials.renewed_at})
         await self._save(renewed)
         return renewed
 
     async def save(self, credentials: ETradeCredentials) -> None:
-        async with self._renewal_lock:
+        async with self._transaction():
+            current = await self._load()
+            if current is not None and _same_credentials(current, credentials):
+                renewed = [t for t in (current.renewed_at, credentials.renewed_at) if t is not None]
+                credentials = credentials.model_copy(
+                    update={
+                        "last_used_at": max(current.last_used_at, credentials.last_used_at),
+                        "renewed_at": max(renewed) if renewed else None,
+                    }
+                )
             await self._save(credentials)
 
     async def _save(self, credentials: ETradeCredentials) -> None:
         await self._credential_store.save(self._storage_key, credentials)
 
     async def load(self) -> ETradeCredentials | None:
-        return await self._credential_store.load(self._storage_key)
+        async with self._transaction():
+            return await self._load()
 
     async def delete(self) -> None:
-        async with self._renewal_lock:
+        async with self._transaction():
             await self._credential_store.delete(self._storage_key)
+
+    async def revoke(self) -> None:
+        """Revoke current credentials and delete locally only after broker success.
+
+        This coordinates lifecycle updates, not already-dispatched API requests.
+        Missing credentials are a no-op. Broker errors preserve local credentials.
+        """
+        async with self._transaction():
+            credentials = await self._load()
+            if credentials is not None:
+                await self._oauth_client.revoke_access_token(credentials)
+                await self._credential_store.delete(self._storage_key)
 
     async def record_usage(self, credentials: ETradeCredentials) -> None:
         """Record confirmed usage without overwriting newer or replaced credentials."""
         used_at = self._now()
-        async with self._renewal_lock:
-            current = await self.load()
-            if current is None or (
-                current.access_token != credentials.access_token
-                or current.access_token_secret != credentials.access_token_secret
-                or current.acquired_at != credentials.acquired_at
-            ):
+        async with self._transaction():
+            current = await self._load()
+            if current is None or not _same_credentials(current, credentials):
                 return
             if used_at > current.last_used_at:
                 await self._save(current.with_last_used(used_at))
@@ -135,6 +171,14 @@ class SessionManager:
         if value.tzinfo is None or value.utcoffset() is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+
+def _same_credentials(left: ETradeCredentials, right: ETradeCredentials) -> bool:
+    return (
+        left.access_token == right.access_token
+        and left.access_token_secret == right.access_token_secret
+        and left.acquired_at == right.acquired_at
+    )
 
 
 class SessionAuthenticator:

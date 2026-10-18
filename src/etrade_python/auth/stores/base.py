@@ -1,6 +1,7 @@
 """Credential store protocol."""
 
-from typing import Protocol
+from contextlib import AbstractAsyncContextManager
+from typing import Protocol, runtime_checkable
 
 from etrade_python.auth.credentials import ETradeCredentials
 
@@ -16,3 +17,17 @@ class CredentialStore(Protocol):
 
     async def delete(self, profile: str) -> None:
         """Delete credentials for a profile."""
+
+
+@runtime_checkable
+class CoordinatedCredentialStore(CredentialStore, Protocol):
+    """Optional transaction lock shared by all users of a credential namespace.
+
+    SessionManager holds this lock across complete lifecycle operations. Store
+    methods must not reacquire it. Direct store users must explicitly acquire it
+    around read/modify/write sequences. Locks need not be reentrant.
+    """
+
+    def lock(self, namespace: str) -> AbstractAsyncContextManager[None]:
+        """Exclusively coordinate a namespace, releasing ownership on exit."""
+        ...

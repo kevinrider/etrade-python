@@ -17,6 +17,7 @@ from etrade_python.config import ETradeSettings
 from etrade_python.exceptions import (
     AuthenticationRequired,
     AuthorizationExpired,
+    CredentialCoordinationError,
     ETradeAuthenticationError,
     ETradeTransportError,
     ETradeValidationError,
@@ -145,6 +146,8 @@ class ApiTransport:
                 raise AuthenticationRequired("Authorization is required") from None
             except AuthorizationExpired:
                 raise AuthorizationExpired("Authorization has expired") from None
+            except CredentialCoordinationError:
+                raise
             except Exception:
                 raise ETradeAuthenticationError("Request authentication failed") from None
             if (

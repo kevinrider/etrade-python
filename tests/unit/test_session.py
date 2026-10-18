@@ -348,7 +348,7 @@ async def test_custom_store_receives_namespaced_keys(
         assert await manager.load() == credentials
         await manager.delete()
 
-    assert len(store.keys) == 3
+    assert len(store.keys) == 4
     assert len(set(store.keys)) == 1
     environment, fingerprint, profile = store.keys[0].split(":")
     assert environment == "sandbox"

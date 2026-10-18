@@ -103,6 +103,9 @@ class FakeSession:
     async def delete(self) -> None:
         self.deleted = True
 
+    async def revoke(self) -> None:
+        self.deleted = True
+
 
 class FakeAccounts:
     def __init__(self, client: "FakeClient") -> None:
@@ -564,6 +567,22 @@ def test_auth_status(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 0
     assert "No credentials stored" in result.output
     assert "fake-key" not in result.output
+
+
+def test_auth_revoke_uses_coordinated_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch)
+    monkeypatch.setattr("etrade_python.cli.app.ETradeClient", FakeClient)
+    calls: list[FakeSession] = []
+
+    async def coordinated_revoke(self: FakeSession) -> None:
+        calls.append(self)
+
+    monkeypatch.setattr(FakeSession, "revoke", coordinated_revoke)
+    result = runner.invoke(app, ["auth", "revoke"])
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    assert "Credentials removed" in result.output
 
 
 def test_auth_login_does_not_echo_verifier(monkeypatch: pytest.MonkeyPatch) -> None:
