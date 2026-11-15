@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 — 2026-11-15
+
+### Fixed
+
+- Require `filelock>=4.2.1,<5` to include upstream security fixes.
+
 ## 1.1.0 — 2026-10-17
 
 ### Added
