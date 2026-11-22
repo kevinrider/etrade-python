@@ -483,7 +483,7 @@ uv build
 uv run python -m twine check dist/*
 ```
 
-CI checks Python 3.11–3.14, enforces at least 90% combined statement/branch coverage,
+CI checks Python 3.11–3.15, enforces at least 90% combined statement/branch coverage,
 and verifies wheel installation outside the checkout. Push and pull-request CI
 does not publish. A separate release workflow publishes stable GitHub releases
 using PyPI Trusted Publishing. See

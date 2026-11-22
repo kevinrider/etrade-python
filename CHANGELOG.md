@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Python 3.15 support, with required CI and release checks across Python 3.11–3.15.
+
 ## 1.1.1 — 2026-11-15
 
 ### Fixed
